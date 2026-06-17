@@ -898,12 +898,11 @@ alter publication supabase_realtime
             style="width:auto;padding:9px 20px;font-size:13px">
             📥 CSVをダウンロード
           </button>
-          <button class="btn btn-ghost" onclick="id('csvImportInput').click()"
-            style="width:auto;padding:9px 20px;font-size:13px">
+          <label class="btn btn-ghost" style="width:auto;padding:9px 20px;font-size:13px;cursor:pointer">
             📤 調整さんCSVインポート
-          </button>
-          <input type="file" id="csvImportInput" accept=".csv,text/csv"
-            style="display:none" onchange="importAdjustCSV(this)">
+            <input type="file" accept=".csv,text/csv"
+              style="display:none" onchange="importAdjustCSV(this)">
+          </label>
           <button class="btn btn-ghost" onclick="adminLogout()"
             style="width:auto;padding:9px 20px;font-size:13px">
             ログアウト
