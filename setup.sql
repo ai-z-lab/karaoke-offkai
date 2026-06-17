@@ -20,13 +20,26 @@ create table if not exists settings (
 
 -- ── 初期データ ────────────────────────────────────
 insert into settings (key, value) values
-  ('event_title',    'カラオケオフ会'),
-  ('event_datetime', ''),
-  ('event_place',    ''),
-  ('event_notes',    ''),
-  ('notice',         ''),
-  ('admin_pw',       '')   -- アプリのセットアップ画面から自動設定される（平文）
+  ('event_title',      'カラオケオフ会'),
+  ('event_datetime',   ''),   -- 旧フィールド（後方互換のため残す）
+  ('event_date',       ''),   -- 日付 例: 2025-06-15
+  ('event_start_time', ''),   -- 開始時刻 例: 18:00
+  ('event_end_time',   ''),   -- 終了時刻 例: 21:00
+  ('event_place',      ''),
+  ('event_notes',      ''),
+  ('notice',           ''),
+  ('admin_pw',         '')    -- アプリのセットアップ画面から自動設定される（平文）
 on conflict (key) do nothing;
+
+-- ── 既存DBへの追加（すでにテーブルがある場合はこちらを実行） ──
+-- insert into settings (key, value) values
+--   ('event_date',       ''),
+--   ('event_start_time', ''),
+--   ('event_end_time',   '')
+-- on conflict (key) do nothing;
+
+-- settings に upsert を許可するポリシーを追加
+-- ※ 下記は新規セットアップ時のみ必要（既存DBには別途追加）
 
 -- ── RLS (Row Level Security) ──────────────────────
 alter table participants enable row level security;
@@ -50,6 +63,8 @@ create policy "delete_participants"
 -- ※ 本番移行時は update を service_role のみに変更推奨
 create policy "read_settings"
   on settings for select using (true);
+create policy "insert_settings"
+  on settings for insert with check (true);
 create policy "update_settings"
   on settings for update using (true);
 
