@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d0b18">
+<title>カラオケオフ会 参加管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* ═══════════════════════════════════════
+   DESIGN TOKENS
+   夜の会場＋スポットライト：深い紫紺の空間に
+   マゼンタとシアンの2色スポット。
+   看板の蛍光管をイメージした signature glow。
+═══════════════════════════════════════ */
+:root {
+  --bg:        #0d0b18;
+  --surface:   #161326;
+  --card:      #1e1a30;
+  --border:    #2d2848;
+  --accent:    #d946ef;   /* magenta spotlight */
+  --accent2:   #22d3ee;   /* cyan spotlight    */
+  --going:     #4ade80;
+  --maybe:     #fbbf24;
+  --tbd:       #94a3b8;
+  --text:      #ede9ff;
+  --muted:     #7c75a8;
+  --danger:    #f87171;
+  --r:         14px;
+  --rsm:       9px;
+  --rp:        99px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+               'Noto Sans JP', Meiryo, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  padding-bottom: 80px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══ HEADER ═══════════════════════════ */
+.app-header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(13,11,24,.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  padding: 14px 16px 0;
+}
+.header-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 10px;
+  margin-bottom: 12px;
+}
+.event-title-display {
+  font-size: 19px; font-weight: 800; line-height: 1.2;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+/* signature: live indicator with glow */
+.live-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(74,222,128,.1);
+  border: 1px solid rgba(74,222,128,.35);
+  border-radius: var(--rp);
+  padding: 3px 10px; flex-shrink: 0; margin-top: 2px;
+  font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  color: var(--going);
+  box-shadow: 0 0 8px rgba(74,222,128,.2);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--going);
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* event info block */
+.event-info-block {
+  font-size: 12px; color: var(--muted); line-height: 1.9;
+  margin-bottom: 12px;
+}
+.event-info-block span { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+/* notice banner */
+.notice-wrap { margin-bottom: 12px; }
+.notice-banner {
+  background: linear-gradient(90deg,rgba(217,70,239,.13),rgba(34,211,238,.08));
+  border: 1px solid rgba(217,70,239,.3);
+  border-radius: var(--rsm);
+  padding: 9px 13px;
+  font-size: 12px; color: #e8d8ff; line-height: 1.7;
+  white-space: pre-wrap; word-break: break-all;
+}
+.notice-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .08em;
+  color: var(--accent); margin-bottom: 3px;
+}
+
+/* tabs */
+.tabs {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+.tab-btn {
+  flex: 1; padding: 10px 4px;
+  background: none; border: none;
+  border-bottom: 2.5px solid transparent;
+  color: var(--muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: color .2s, border-color .2s;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ═══ MAIN ══════════════════════════════ */
+main { padding: 16px; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ═══ STATS ═════════════════════════════ */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 8px; margin-bottom: 18px;
+}
+.stat-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 13px 6px; text-align: center;
+}
+.stat-num { font-size: 32px; font-weight: 800; line-height: 1; }
+.stat-num.going   { color: var(--going); }
+.stat-num.maybe   { color: var(--maybe); }
+.stat-num.tbd     { color: var(--tbd); }
+.stat-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+/* ═══ PARTICIPANT LIST ══════════════════ */
+.group-block { margin-bottom: 22px; }
+.group-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 9px;
+}
+.g-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.g-dot.going   { background: var(--going); }
+.g-dot.maybe   { background: var(--maybe); }
+.g-dot.tbd     { background: var(--tbd); }
+.g-name { font-size: 13px; font-weight: 700; }
+.g-name.going  { color: var(--going); }
+.g-name.maybe  { color: var(--maybe); }
+.g-name.tbd    { color: var(--tbd); }
+.g-count { font-size: 11px; color: var(--muted); }
+
+.p-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 7px;
+}
+.p-body { flex: 1; min-width: 0; }
+.p-name-text { font-size: 15px; font-weight: 600; }
+.p-comment-text { font-size: 11px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+
+.empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; }
+
+/* ═══ FORM ══════════════════════════════ */
+.form-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 18px; margin-bottom: 16px;
+}
+.form-heading {
+  font-size: 14px; font-weight: 700; color: var(--accent2);
+  margin-bottom: 16px;
+}
+.field-wrap { margin-bottom: 14px; }
+.field-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+}
+.field-required { color: var(--accent); }
+
+.text-input,
+.pw-input,
+.textarea-input {
+  width: 100%;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  color: var(--text); font-size: 16px; font-family: inherit;
+  outline: none; transition: border-color .2s;
+  -webkit-appearance: none;
+}
+.text-input:focus,
+.pw-input:focus,
+.textarea-input:focus { border-color: var(--accent); }
+.textarea-input { resize: vertical; min-height: 76px; font-size: 14px; line-height: 1.5; }
+
+/* radio pills */
+.pill-group { display: flex; gap: 7px; flex-wrap: wrap; }
+.pill-group input[type=radio] { display: none; }
+.pill-label {
+  padding: 8px 15px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--rp);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--muted);
+  transition: all .18s; white-space: nowrap;
+}
+.pill-group input[value=going]:checked   + .pill-label {
+  border-color: var(--going); color: var(--going); background: rgba(74,222,128,.1); }
+.pill-group input[value=maybe]:checked   + .pill-label {
+  border-color: var(--maybe); color: var(--maybe); background: rgba(251,191,36,.1); }
+.pill-group input[value=tbd]:checked     + .pill-label {
+  border-color: var(--tbd);   color: var(--tbd);   background: rgba(148,163,184,.1); }
+
+/* ═══ BUTTONS ════════════════════════════ */
+.btn {
+  display: block; width: 100%; padding: 13px;
+  border: none; border-radius: var(--r);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-family: inherit; letter-spacing: .02em;
+  transition: opacity .2s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .4; pointer-events: none; }
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #0d0b18;
+}
+.btn-sm {
+  display: inline-flex; align-items: center;
+  width: auto; padding: 5px 12px;
+  font-size: 11px; font-weight: 700; border-radius: 7px;
+}
+.btn-edit   { background: rgba(34,211,238,.12); color: var(--accent2); border: 1px solid rgba(34,211,238,.28); }
+.btn-delete { background: rgba(248,113,113,.12); color: var(--danger);  border: 1px solid rgba(248,113,113,.28); }
+.btn-ghost  { background: rgba(255,255,255,.06); color: var(--muted);   border: 1px solid var(--border); }
+
+/* ═══ ADMIN INLINE EDIT ════════════════= */
+.inline-edit-wrap { flex: 1; min-width: 0; }
+.inline-text-input {
+  width: 100%;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 7px; padding: 7px 11px;
+  color: var(--text); font-size: 14px; font-family: inherit;
+  outline: none; margin-bottom: 7px;
+}
+.inline-pill-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.inline-pill-group label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--muted); cursor: pointer;
+}
+.inline-pill-group input[type=radio] { accent-color: var(--accent); }
+.inline-actions { display: flex; gap: 7px; }
+
+/* ═══ SECTION LABEL ════════════════════ */
+.section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px;
+}
+
+/* ═══ SPINNER ════════════════════════════ */
+.spinner {
+  display: inline-block; width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,.2);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .55s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ TOAST ══════════════════════════════ */
+.toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 10px 22px; border-radius: var(--rp);
+  font-size: 13px; font-weight: 700;
+  z-index: 200; opacity: 0; pointer-events: none;
+  white-space: nowrap; max-width: 88vw;
+  transition: opacity .28s, transform .28s;
+}
+.toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.toast-ok   { background: var(--going);  color: #051a0c; }
+.toast-err  { background: var(--danger); color: #fff; }
+.toast-info { background: var(--accent2); color: #001a22; }
+
+/* ═══ CONFIG SCREEN ═════════════════════ */
+#configScreen {
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 28px 20px;
+  background:
+    radial-gradient(ellipse 70% 40% at 70% 10%, rgba(217,70,239,.18) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 35% at 20% 85%, rgba(34,211,238,.12) 0%, transparent 65%),
+    var(--bg);
+}
+.cfg-logo { font-size: 52px; margin-bottom: 6px; }
+.cfg-title {
+  font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 6px;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cfg-sub { font-size: 12px; color: var(--muted); text-align: center; margin-bottom: 28px; line-height: 1.7; }
+.cfg-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px; width: 100%; max-width: 420px;
+}
+.cfg-section-title {
+  font-size: 11px; font-weight: 800; letter-spacing: .08em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 14px;
+}
+.cfg-hint {
+  font-size: 11px; color: var(--muted); line-height: 1.75;
+  background: rgba(34,211,238,.06); border: 1px solid rgba(34,211,238,.18);
+  border-radius: var(--rsm); padding: 11px 13px; margin-bottom: 16px;
+}
+.cfg-hint a { color: var(--accent2); text-decoration: none; }
+.cfg-hint code {
+  background: rgba(255,255,255,.08); padding: 1px 5px;
+  border-radius: 4px; font-size: 11px; font-family: monospace;
+}
+.sql-block-wrap {
+  position: relative; margin-bottom: 16px;
+}
+.sql-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  font-size: 10.5px; color: #93c5fd; line-height: 1.7;
+  font-family: 'Menlo', monospace; white-space: pre;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  max-height: 180px; overflow-y: auto;
+}
+.sql-copy-btn {
+  position: absolute; top: 7px; right: 7px;
+  background: rgba(34,211,238,.15); border: 1px solid rgba(34,211,238,.3);
+  color: var(--accent2); padding: 4px 11px;
+  border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
+
+/* hide/show */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     CONFIG SCREEN — 初回セットアップ
+══════════════════════════════════════════ -->
+<div id="configScreen">
+  <div class="cfg-logo">🎤</div>
+  <div class="cfg-title">オフ会 参加管理</div>
+  <div class="cfg-sub">初回のみ設定が必要です<br>次回以降は自動で接続されます</div>
+
+  <div class="cfg-card">
+    <div class="cfg-section-title">Step 1 — SQLを実行</div>
+    <div class="cfg-hint">
+      <a href="https://supabase.com" target="_blank">supabase.com</a> で無料プロジェクトを作成し、<br>
+      <b>SQL Editor</b> に下記をコピーして実行してください。
+    </div>
+    <div class="sql-block-wrap">
+      <pre class="sql-block" id="sqlText">-- テーブル: 参加者
+create table if not exists participants (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  status      text not null
+              check (status in ('going','maybe','tbd')),
+  comment     text not null default '',
+  created_at  timestamptz not null default now()
+);
+
+-- テーブル: 設定
+create table if not exists settings (
+  key   text primary key,
+  value text not null default ''
+);
+
+-- 初期データ
+insert into settings (key, value) values
+  ('event_title',   'カラオケオフ会'),
+  ('event_datetime',''),
+  ('event_place',   ''),
+  ('event_notes',   ''),
+  ('notice',        ''),
+  ('admin_pw',      '')
+on conflict (key) do nothing;
+
+-- RLS 有効化
+alter table participants enable row level security;
+alter table settings     enable row level security;
+
+-- participants: 全員が読み書き可
+create policy "read_participants"
+  on participants for select using (true);
+create policy "insert_participants"
+  on participants for insert with check (true);
+create policy "update_participants"
+  on participants for update using (true);
+create policy "delete_participants"
+  on participants for delete using (true);
+
+-- settings: 全員が読める
+--           書き込みはサーバーキー(service_role)のみ
+--           → フロントからは update を service_role 経由で行う
+--           MVP では update も許可（注意事項を読むこと）
+create policy "read_settings"
+  on settings for select using (true);
+create policy "update_settings"
+  on settings for update using (true);
+
+-- Realtime
+alter publication supabase_realtime
+  add table participants, settings;</pre>
+      <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
+    </div>
+
+    <div class="cfg-section-title" style="margin-top:6px">Step 2 — API情報を入力</div>
+    <div class="cfg-hint">
+      <b>Project Settings → API</b> から取得してください。<br>
+      ・<code>Project URL</code><br>
+      ・<code>anon public</code> キー
+    </div>
+
+    <div class="field-wrap">
+      <label class="field-label">Project URL</label>
+      <input class="text-input" id="cfgUrl" type="url"
+        placeholder="https://xxxxxxxx.supabase.co"
+        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">anon public key</label>
+      <input class="text-input" id="cfgKey" type="text"
+        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">管理者パスワード（自分で決める）</label>
+      <input class="text-input" id="cfgPw" type="text"
+        placeholder="半角英数字推奨"
+        autocomplete="off" autocorrect="off" autocapitalize="off">
+      <p style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">
+        ※ シンプル化のため平文でDBに保存されます。グルチャ内輪利用前提としてください。
+      </p>
+    </div>
+
+    <button class="btn btn-primary" id="cfgConnectBtn" onclick="handleSetup()">
+      接続してスタート
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     APP
+══════════════════════════════════════════ -->
+<div id="appRoot" class="hidden">
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-top">
+        <div class="event-title-display" id="eventTitleDisplay">🎤 カラオケオフ会</div>
+        <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+      </div>
+
+      <!-- event info -->
+      <div class="event-info-block" id="eventInfoBlock"></div>
+
+      <!-- notice -->
+      <div class="notice-wrap hidden" id="noticeWrap">
+        <div class="notice-banner">
+          <div class="notice-eyebrow">📢 お知らせ</div>
+          <div id="noticeText"></div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="list"     onclick="switchTab(this)">一覧</button>
+        <button class="tab-btn"        data-tab="register" onclick="switchTab(this)">参加登録</button>
+        <button class="tab-btn"        data-tab="admin"    onclick="switchTab(this)">管理</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── 一覧タブ ─────────────────────────── -->
+    <div class="tab-pane active" id="pane-list">
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num going" id="cnt-going">—</div>
+          <div class="stat-label">✅ 参加する</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num maybe" id="cnt-maybe">—</div>
+          <div class="stat-label">🤔 検討中</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num tbd" id="cnt-tbd">—</div>
+          <div class="stat-label">⏰ 時間未定</div>
+        </div>
+      </div>
+
+      <div id="listContainer">
+        <div class="empty-state">読み込み中…</div>
+      </div>
+    </div>
+
+    <!-- ── 参加登録タブ ──────────────────────── -->
+    <div class="tab-pane" id="pane-register">
+      <div class="form-card">
+        <div class="form-heading">✏️ 参加登録</div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regName">
+            名前 <span class="field-required">*</span>
+          </label>
+          <input class="text-input" id="regName" type="text"
+            placeholder="表示名（20文字以内）" maxlength="20"
+            autocomplete="off" autocorrect="off" autocapitalize="off">
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">
+            ステータス <span class="field-required">*</span>
+          </label>
+          <div class="pill-group">
+            <input type="radio" name="regStatus" id="rs-going" value="going">
+            <label class="pill-label" for="rs-going">✅ 参加する</label>
+            <input type="radio" name="regStatus" id="rs-maybe" value="maybe" checked>
+            <label class="pill-label" for="rs-maybe">🤔 検討中</label>
+            <input type="radio" name="regStatus" id="rs-tbd"   value="tbd">
+            <label class="pill-label" for="rs-tbd">⏰ 時間未定</label>
+          </div>
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regComment">コメント（任意・40文字）</label>
+          <input class="text-input" id="regComment" type="text"
+            placeholder="例：19時ごろ合流予定" maxlength="40"
+            autocomplete="off" autocorrect="off">
+        </div>
+
+        <button class="btn btn-primary" id="regBtn" onclick="register()">
+          登録する
+        </button>
+      </div>
+      <p style="font-size:11px;color:var(--muted);text-align:center">
+        ※ 変更・削除は管理者に依頼してください
+      </p>
+    </div>
+
+    <!-- ── 管理タブ ─────────────────────────── -->
+    <div class="tab-pane" id="pane-admin">
+
+      <!-- ロック画面 -->
+      <div class="form-card" id="adminLockCard">
+        <div class="form-heading">🔐 管理者ログイン</div>
+        <div class="field-wrap">
+          <input class="pw-input" id="adminPwInput" type="password"
+            placeholder="パスワード"
+            onkeydown="if(event.key==='Enter')adminLogin()">
+        </div>
+        <button class="btn btn-primary" onclick="adminLogin()">ログイン</button>
+      </div>
+
+      <!-- 管理パネル -->
+      <div id="adminPanel" class="hidden">
+
+        <!-- お知らせ -->
+        <div class="form-card">
+          <div class="form-heading">📢 お知らせ</div>
+          <div class="field-wrap">
+            <textarea class="textarea-input" id="adminNotice"
+              placeholder="告知・変更情報など（空にするとバナー非表示）"></textarea>
+          </div>
+          <button class="btn btn-primary" id="noticeSaveBtn" onclick="saveNotice()">
+            保存する
+          </button>
+        </div>
+
+        <!-- イベント情報 -->
+        <div class="form-card">
+          <div class="form-heading">📋 イベント情報</div>
+          <div class="field-wrap">
+            <label class="field-label">イベント名</label>
+            <input class="text-input" id="adminTitle" type="text"
+              placeholder="例：カラオケオフ会 6/15（土）" maxlength="40">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">日時</label>
+            <input class="text-input" id="adminDatetime" type="text"
+              placeholder="例：6月15日（土）18:00〜" maxlength="60">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">場所</label>
+            <input class="text-input" id="adminPlace" type="text"
+              placeholder="例：渋谷 カラオケパセラ" maxlength="60">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">注意事項</label>
+            <textarea class="textarea-input" id="adminNotes"
+              placeholder="例：フリータイム制。途中参加・退出OK。" maxlength="200"></textarea>
+          </div>
+          <button class="btn btn-primary" id="infoSaveBtn" onclick="saveInfo()">
+            保存する
+          </button>
+        </div>
+
+        <!-- パスワード変更 -->
+        <div class="form-card">
+          <div class="form-heading">🔑 管理者パスワード変更</div>
+          <div class="field-wrap">
+            <label class="field-label">新しいパスワード</label>
+            <input class="text-input" id="adminNewPw" type="text"
+              placeholder="新しいパスワード" maxlength="64"
+              autocomplete="off" autocorrect="off" autocapitalize="off">
+          </div>
+          <button class="btn btn-primary" id="pwChangeBtn" onclick="changeAdminPw()">
+            パスワードを変更する
+          </button>
+          <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
+            ※ シンプル化のため平文保存です。anon keyを知る人には見える設計のため、内輪利用限定としてください。
+          </p>
+        </div>
+
+        <!-- 参加者管理 -->
+        <div class="section-label">参加者を編集・削除</div>
+        <div id="adminListContainer">
+          <div class="empty-state">読み込み中…</div>
+        </div>
+
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost" onclick="adminLogout()"
+            style="width:auto;padding:9px 20px;font-size:13px">
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div><!-- /pane-admin -->
+
+  </main>
+</div><!-- /appRoot -->
+
+<div class="toast" id="toastEl"></div>
+
+<!-- ══════════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ─── storage keys ──────────────────────── */
+const SK = {
+  url:  'ok_sb_url',
+  key:  'ok_sb_key',
+  // パスワード自体はlocalStorageに保存しない
+};
+
+/* ─── state ─────────────────────────────── */
+let sb            = null;
+let participants  = [];
+let settings      = {};   // key→value map
+let adminUnlocked = false;
+let rtChannel     = null;
+
+/* ─── startup ───────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  const url = ls(SK.url);
+  const key = ls(SK.key);
+  if (url && key) {
+    sb = supabase.createClient(url, key);
+    bootApp();
+  }
+});
+
+/* ─── setup ─────────────────────────────── */
+async function handleSetup() {
+  const url = id('cfgUrl').value.trim();
+  const key = id('cfgKey').value.trim();
+  const pw  = id('cfgPw').value.trim();
+  if (!url || !key) { toast('URLとAPIキーを入力してください', 'err'); return; }
+  if (!pw)          { toast('管理者パスワードを決めてください', 'err'); return; }
+
+  setLoading('cfgConnectBtn', true, '接続中…');
+  try {
+    sb = supabase.createClient(url, key);
+    /* 接続テスト */
+    const { error: testErr } = await sb.from('settings').select('key').limit(1);
+    if (testErr) throw testErr;
+
+    /* パスワードを平文でDBへ保存（シンプル化） */
+    const { error: pwErr } = await sb
+      .from('settings').update({ value: pw }).eq('key', 'admin_pw');
+    if (pwErr) throw pwErr;
+
+    /* 認証情報を保存（パスワード自体は保存しない） */
+    lsSet(SK.url, url);
+    lsSet(SK.key, key);
+
+    bootApp();
+  } catch(e) {
+    setLoading('cfgConnectBtn', false, '接続してスタート');
+    toast('接続失敗: ' + (e.message ?? 'URL/キーを確認してください'), 'err');
+  }
+}
+
+function copySQL() {
+  const sql = id('sqlText').textContent;
+  navigator.clipboard.writeText(sql)
+    .then(() => toast('SQLをコピーしました', 'info'))
+    .catch(() => toast('コピーに失敗しました', 'err'));
+}
+
+/* ─── app boot ──────────────────────────── */
+async function bootApp() {
+  id('configScreen').classList.add('hidden');
+  id('appRoot').classList.remove('hidden');
+  await Promise.all([fetchSettings(), fetchParticipants()]);
+  subscribeRealtime();
+}
+
+/* ─── data fetch ────────────────────────── */
+async function fetchSettings() {
+  const { data, error } = await sb.from('settings').select('*');
+  if (error) { console.error(error); return; }
+  settings = Object.fromEntries(data.map(r => [r.key, r.value]));
+  applySettings();
+}
+
+async function fetchParticipants() {
+  const { data, error } = await sb
+    .from('participants').select('*')
+    .order('created_at', { ascending: true });
+  if (error) { console.error(error); return; }
+  participants = data ?? [];
+  renderList();
+  if (adminUnlocked) renderAdminList();
+}
+
+/* ─── apply settings to UI ──────────────── */
+function applySettings() {
+  const title    = settings.event_title    || 'カラオケオフ会';
+  const datetime = settings.event_datetime || '';
+  const place    = settings.event_place    || '';
+  const notes    = settings.event_notes    || '';
+  const notice   = settings.notice         || '';
+
+  id('eventTitleDisplay').textContent = '🎤 ' + title;
+
+  /* event info block */
+  let infoHtml = '';
+  if (datetime) infoHtml += `📅<span>${esc(datetime)}</span>　`;
+  if (place)    infoHtml += `📍<span>${esc(place)}</span>　`;
+  if (notes)    infoHtml += `<br>📝<span style="font-weight:400;color:var(--muted)">${esc(notes)}</span>`;
+  id('eventInfoBlock').innerHTML = infoHtml;
+  id('eventInfoBlock').style.display = infoHtml ? '' : 'none';
+
+  /* notice */
+  if (notice.trim()) {
+    id('noticeText').textContent = notice;
+    id('noticeWrap').classList.remove('hidden');
+  } else {
+    id('noticeWrap').classList.add('hidden');
+  }
+
+  /* admin fields */
+  id('adminTitle').value    = title;
+  id('adminDatetime').value = datetime;
+  id('adminPlace').value    = place;
+  id('adminNotes').value    = notes;
+  id('adminNotice').value   = notice;
+}
+
+/* ─── realtime ──────────────────────────── */
+function subscribeRealtime() {
+  if (rtChannel) sb.removeChannel(rtChannel);
+  rtChannel = sb.channel('offkai-rt')
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'participants' },
+        () => fetchParticipants())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        () => fetchSettings())
+    .subscribe();
+}
+
+/* ─── render list ───────────────────────── */
+const GROUP_META = [
+  { key: 'going', emoji: '✅', label: '参加する', cls: 'going' },
+  { key: 'maybe', emoji: '🤔', label: '検討中',   cls: 'maybe' },
+  { key: 'tbd',   emoji: '⏰', label: '時間未定', cls: 'tbd'   },
+];
+
+function renderList() {
+  GROUP_META.forEach(g => {
+    id('cnt-' + g.key).textContent =
+      participants.filter(p => p.status === g.key).length;
+  });
+
+  const c = id('listContainer');
+  if (!participants.length) {
+    c.innerHTML = '<div class="empty-state">まだ参加者がいません<br>最初に登録してみよう！</div>';
+    return;
+  }
+
+  let html = '';
+  GROUP_META.forEach(g => {
+    const grp = participants.filter(p => p.status === g.key);
+    if (!grp.length) return;
+    html += `
+      <div class="group-block">
+        <div class="group-head">
+          <div class="g-dot ${g.cls}"></div>
+          <div class="g-name ${g.cls}">${g.emoji} ${g.label}</div>
+          <div class="g-count">${grp.length}人</div>
+        </div>`;
+    grp.forEach(p => {
+      html += `
+        <div class="p-item">
+          <div class="p-body">
+            <div class="p-name-text">${esc(p.name)}</div>
+            ${p.comment ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+  c.innerHTML = html;
+}
+
+/* ─── register ──────────────────────────── */
+async function register() {
+  const name    = id('regName').value.trim();
+  const status  = document.querySelector('input[name=regStatus]:checked')?.value ?? 'maybe';
+  const comment = id('regComment').value.trim();
+
+  if (!name)  { toast('名前を入力してください', 'err'); return; }
+  if (participants.some(p => p.name === name)) {
+    toast('その名前はすでに登録されています', 'err'); return;
+  }
+
+  setLoading('regBtn', true, '登録中…');
+  const { error } = await sb.from('participants').insert({ name, status, comment });
+  setLoading('regBtn', false, '登録する');
+
+  if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
+
+  id('regName').value = '';
+  id('regComment').value = '';
+  document.getElementById('rs-maybe').checked = true;
+  toast('登録しました！');
+  switchTab(document.querySelector('[data-tab=list]'));
+}
+
+/* ─── admin auth ────────────────────────── */
+async function adminLogin() {
+  const input      = id('adminPwInput').value;
+  const storedPw   = settings.admin_pw ?? '';
+
+  if (!storedPw) {
+    toast('パスワードが未設定です。初回セットアップを完了してください。', 'err');
+    return;
+  }
+  if (input !== storedPw) {
+    toast('パスワードが違います', 'err'); return;
+  }
+
+  adminUnlocked = true;
+  id('adminLockCard').classList.add('hidden');
+  id('adminPanel').classList.remove('hidden');
+  renderAdminList();
+  toast('管理者モード ON', 'info');
+}
+
+function adminLogout() {
+  adminUnlocked = false;
+  id('adminLockCard').classList.remove('hidden');
+  id('adminPanel').classList.add('hidden');
+  id('adminPwInput').value = '';
+  toast('ログアウトしました');
+}
+
+/* ─── admin: render list ────────────────── */
+function renderAdminList() {
+  const c = id('adminListContainer');
+  if (!participants.length) {
+    c.innerHTML = '<div class="empty-state">登録者なし</div>'; return;
+  }
+  let html = '';
+  participants.forEach((p, i) => {
+    const em = { going:'✅', maybe:'🤔', tbd:'⏰' }[p.status] ?? '';
+    html += `
+      <div class="p-item" id="ai-${i}">
+        <div class="p-body">
+          <div class="p-name-text">${em} ${esc(p.name)}</div>
+          ${p.comment ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-edit"   onclick="openEdit(${i})">編集</button>
+          <button class="btn btn-sm btn-delete" onclick="deletePart('${p.id}',${i})">削除</button>
+        </div>
+      </div>`;
+  });
+  c.innerHTML = html;
+}
+
+function openEdit(i) {
+  const p = participants[i];
+  const item = id('ai-' + i);
+  item.innerHTML = `
+    <div class="inline-edit-wrap">
+      <input class="inline-text-input" id="ei-name-${i}"
+        value="${esc(p.name)}" maxlength="20" placeholder="名前">
+      <div class="inline-pill-group">
+        ${[['going','✅ 参加する'],['maybe','🤔 検討中'],['tbd','⏰ 時間未定']].map(([v,l]) => `
+          <label>
+            <input type="radio" name="ei-st-${i}" value="${v}"
+              ${p.status===v?'checked':''}>
+            ${l}
+          </label>`).join('')}
+      </div>
+      <input class="inline-text-input" id="ei-cmt-${i}"
+        value="${esc(p.comment??'')}" maxlength="40" placeholder="コメント（任意）">
+      <div class="inline-actions">
+        <button class="btn btn-sm btn-edit"  onclick="saveEdit('${p.id}',${i})">保存</button>
+        <button class="btn btn-sm btn-ghost" onclick="renderAdminList()">戻る</button>
+      </div>
+    </div>`;
+}
+
+async function saveEdit(pid, i) {
+  const name    = id(`ei-name-${i}`).value.trim();
+  const status  = document.querySelector(`input[name="ei-st-${i}"]:checked`)?.value ?? 'maybe';
+  const comment = id(`ei-cmt-${i}`).value.trim();
+  if (!name) { toast('名前は必須です', 'err'); return; }
+  if (participants.some((p, idx) => p.name === name && p.id !== pid)) {
+    toast('その名前はすでに存在します', 'err'); return;
+  }
+  const { error } = await sb.from('participants')
+    .update({ name, status, comment }).eq('id', pid);
+  if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
+  toast('更新しました');
+}
+
+async function deletePart(pid, i) {
+  const name = participants[i]?.name ?? '';
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  const { error } = await sb.from('participants').delete().eq('id', pid);
+  if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
+  toast('削除しました');
+}
+
+/* ─── admin: save settings ──────────────── */
+async function saveNotice() {
+  const v = id('adminNotice').value.trim();
+  setLoading('noticeSaveBtn', true, '保存中…');
+  const { error } = await sb.from('settings').update({ value: v }).eq('key', 'notice');
+  setLoading('noticeSaveBtn', false, '保存する');
+  if (error) { toast('保存失敗', 'err'); return; }
+  toast('お知らせを更新しました');
+}
+
+async function saveInfo() {
+  const updates = [
+    { key: 'event_title',    value: id('adminTitle').value.trim()    },
+    { key: 'event_datetime', value: id('adminDatetime').value.trim() },
+    { key: 'event_place',    value: id('adminPlace').value.trim()    },
+    { key: 'event_notes',    value: id('adminNotes').value.trim()    },
+  ];
+  setLoading('infoSaveBtn', true, '保存中…');
+  const promises = updates.map(u =>
+    sb.from('settings').update({ value: u.value }).eq('key', u.key)
+  );
+  const results = await Promise.all(promises);
+  setLoading('infoSaveBtn', false, '保存する');
+  const err = results.find(r => r.error);
+  if (err) { toast('保存失敗: ' + err.error.message, 'err'); return; }
+  toast('イベント情報を更新しました');
+}
+
+async function changeAdminPw() {
+  const newPw = id('adminNewPw').value.trim();
+  if (!newPw) { toast('新しいパスワードを入力してください', 'err'); return; }
+  if (newPw.length < 4) { toast('4文字以上で設定してください', 'err'); return; }
+  setLoading('pwChangeBtn', true, '更新中…');
+  const { error } = await sb.from('settings').update({ value: newPw }).eq('key', 'admin_pw');
+  setLoading('pwChangeBtn', false, 'パスワードを変更する');
+  if (error) { toast('更新失敗', 'err'); return; }
+  id('adminNewPw').value = '';
+  toast('パスワードを変更しました', 'info');
+}
+
+/* ─── tab switching ─────────────────────── */
+function switchTab(el) {
+  const tab = typeof el === 'string'
+    ? document.querySelector(`[data-tab="${el}"]`) : el;
+  if (!tab) return;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  id('pane-' + tab.dataset.tab).classList.add('active');
+}
+
+/* ─── utils ─────────────────────────────── */
+function id(s) { return document.getElementById(s); }
+function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, type = 'ok') {
+  const el = id('toastEl');
+  el.textContent = msg;
+  el.className = `toast show toast-${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+}
+
+function setLoading(btnId, loading, label) {
+  const btn = id(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<span class="spinner"></span>${label}` : label;
+}
+</script>
+</body>
+</html>
