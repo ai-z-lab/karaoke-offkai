@@ -521,6 +521,7 @@ insert into settings (key, value) values
   ('event_start_time', ''),
   ('event_end_time',   ''),
   ('event_place',      ''),
+  ('event_place_url',  ''),
   ('event_notes',      ''),
   ('notice',           ''),
   ('admin_pw',         '')
@@ -798,6 +799,11 @@ alter publication supabase_realtime
               placeholder="例：渋谷 カラオケパセラ" maxlength="60">
           </div>
           <div class="field-wrap">
+            <label class="field-label">場所URL <span style="font-weight:400;font-size:13px;color:var(--muted)">（任意・GoogleマップなどのURL）</span></label>
+            <input class="text-input" id="adminPlaceUrl" type="url"
+              placeholder="例：https://maps.google.com/..." maxlength="500">
+          </div>
+          <div class="field-wrap">
             <label class="field-label">注意事項</label>
             <textarea class="textarea-input" id="adminNotes"
               placeholder="例：フリータイム制。途中参加・退出OK。" maxlength="200"></textarea>
@@ -1008,6 +1014,7 @@ function applySettings() {
   const datetime  = formatDatetime(eventDate, startTime, endTime)
                     || settings.event_datetime || '';
   const place     = settings.event_place      || '';
+  const placeUrl  = settings.event_place_url  || '';
   const notes     = settings.event_notes      || '';
   const notice    = settings.notice           || '';
 
@@ -1016,7 +1023,13 @@ function applySettings() {
   /* event info block */
   let infoHtml = '';
   if (datetime) infoHtml += `📅<span>${esc(datetime)}</span>　`;
-  if (place)    infoHtml += `📍<span>${esc(place)}</span>　`;
+  if (place) {
+    if (placeUrl) {
+      infoHtml += `📍<span><a href="${esc(placeUrl)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${esc(place)}</a></span>　`;
+    } else {
+      infoHtml += `📍<span>${esc(place)}</span>　`;
+    }
+  }
   if (notes)    infoHtml += `<br>📝<span style="font-weight:400;color:var(--muted)">${esc(notes)}</span>`;
   id('eventInfoBlock').innerHTML = infoHtml;
   id('eventInfoBlock').style.display = infoHtml ? '' : 'none';
@@ -1035,6 +1048,7 @@ function applySettings() {
   id('adminStartTime').value  = startTime;
   id('adminEndTime').value    = endTime;
   id('adminPlace').value      = place;
+  id('adminPlaceUrl').value   = placeUrl;
   id('adminNotes').value      = notes;
   id('adminNotice').value     = notice;
 }
@@ -1536,6 +1550,7 @@ async function saveInfo() {
     { key: 'event_start_time', value: id('adminStartTime').value        },
     { key: 'event_end_time',   value: id('adminEndTime').value          },
     { key: 'event_place',      value: id('adminPlace').value.trim()     },
+    { key: 'event_place_url',  value: id('adminPlaceUrl').value.trim()  },
     { key: 'event_notes',      value: id('adminNotes').value.trim()     },
   ];
   setLoading('infoSaveBtn', true, '保存中…');

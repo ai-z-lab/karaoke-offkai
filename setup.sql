@@ -26,6 +26,7 @@ insert into settings (key, value) values
   ('event_start_time', ''),   -- 開始時刻 例: 18:00
   ('event_end_time',   ''),   -- 終了時刻 例: 21:00
   ('event_place',      ''),
+  ('event_place_url',  ''),   -- 場所のURL（GoogleマップなどのリンクURL）
   ('event_notes',      ''),
   ('notice',           ''),
   ('admin_pw',         '')    -- アプリのセットアップ画面から自動設定される（平文）
@@ -35,7 +36,8 @@ on conflict (key) do nothing;
 -- insert into settings (key, value) values
 --   ('event_date',       ''),
 --   ('event_start_time', ''),
---   ('event_end_time',   '')
+--   ('event_end_time',   ''),
+--   ('event_place_url',  '')
 -- on conflict (key) do nothing;
 
 -- settings に upsert を許可するポリシーを追加
