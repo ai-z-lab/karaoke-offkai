@@ -571,7 +571,25 @@ create policy "delete_ptb"
 
 -- Realtime
 alter publication supabase_realtime
-  add table participants, settings, time_blocks, participant_time_blocks;</pre>
+  add table participants, settings, time_blocks, participant_time_blocks;
+
+-- ════════════════════════════════════════════════════
+-- 既存DBへのマイグレーション（すでにテーブルがある場合のみ実行）
+-- ════════════════════════════════════════════════════
+-- ▼ settings に INSERT ポリシーを追加（必須）
+--   「保存失敗: new row violates row-level security policy」が出る場合はこれを実行
+--
+-- create policy "insert_settings"
+--   on settings for insert with check (true);
+--
+-- ▼ 新しいキーを追加（存在しない場合）
+--
+-- insert into settings (key, value) values
+--   ('event_date',       ''),
+--   ('event_start_time', ''),
+--   ('event_end_time',   ''),
+--   ('event_place_url',  '')
+-- on conflict (key) do nothing;</pre>
       <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
     </div>
 

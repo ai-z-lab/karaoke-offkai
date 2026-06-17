@@ -32,17 +32,6 @@ insert into settings (key, value) values
   ('admin_pw',         '')    -- アプリのセットアップ画面から自動設定される（平文）
 on conflict (key) do nothing;
 
--- ── 既存DBへの追加（すでにテーブルがある場合はこちらを実行） ──
--- insert into settings (key, value) values
---   ('event_date',       ''),
---   ('event_start_time', ''),
---   ('event_end_time',   ''),
---   ('event_place_url',  '')
--- on conflict (key) do nothing;
-
--- settings に upsert を許可するポリシーを追加
--- ※ 下記は新規セットアップ時のみ必要（既存DBには別途追加）
-
 -- ── RLS (Row Level Security) ──────────────────────
 alter table participants enable row level security;
 alter table settings     enable row level security;
@@ -57,12 +46,10 @@ create policy "update_participants"
 create policy "delete_participants"
   on participants for delete using (true);
 
--- settings: 全員が読める / 更新もMVPでは許可
--- ※ admin_pw は平文保存（シンプル化のため）。
---    anon keyを知っていれば理論上読み取れるため、
---    グルチャ内輪利用などURLを知る人＝信頼できる人、
---    という前提でのみ使用すること。
--- ※ 本番移行時は update を service_role のみに変更推奨
+-- settings: 全員が読み書き可（内輪利用前提）
+-- ※ このアプリはSupabase Authを使わずアプリ側パスワードで管理者認証するため、
+--   anon roleからのSELECT / INSERT / UPDATE をすべて許可する。
+-- ※ admin_pw は平文保存。anon keyを知る人＝信頼できる人という前提でのみ使用すること。
 create policy "read_settings"
   on settings for select using (true);
 create policy "insert_settings"
@@ -72,7 +59,24 @@ create policy "update_settings"
 
 -- ── Realtime ──────────────────────────────────────
 -- Supabase Dashboard > Database > Replication で
--- 下記2テーブルにチェックが入っていることを確認すること。
--- SQL での有効化コマンド（すでに有効なら不要）:
+-- 下記テーブルにチェックが入っていることを確認すること。
 alter publication supabase_realtime
   add table participants, settings;
+
+-- ════════════════════════════════════════════════════
+-- 既存DBへのマイグレーション（すでにテーブルがある場合）
+-- ════════════════════════════════════════════════════
+-- ▼ settings テーブルに INSERT ポリシーを追加（必須）
+--   「保存失敗: new row violates row-level security policy」が出る場合はこれを実行
+--
+-- create policy "insert_settings"
+--   on settings for insert with check (true);
+--
+-- ▼ 新しいキーを追加（event_date 等が存在しない場合）
+--
+-- insert into settings (key, value) values
+--   ('event_date',       ''),
+--   ('event_start_time', ''),
+--   ('event_end_time',   ''),
+--   ('event_place_url',  '')
+-- on conflict (key) do nothing;
