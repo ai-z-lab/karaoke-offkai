@@ -352,6 +352,45 @@ main { padding: 16px; }
   cursor: pointer; font-family: inherit;
 }
 
+/* ═══ THREADS ID ════════════════════════════ */
+.p-threads-id {
+  font-size: 11px; color: var(--accent); font-weight: 600;
+  margin-top: 1px; word-break: break-all;
+}
+
+/* ═══ SELF EDIT ══════════════════════════════ */
+.self-toggle {
+  display: block; width: 100%; margin-bottom: 16px;
+  background: none; border: 1.5px dashed var(--border);
+  border-radius: var(--r); padding: 11px;
+  color: var(--muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: border-color .2s, color .2s;
+}
+.self-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.self-lookup-row { display: flex; gap: 8px; }
+.self-lookup-row .text-input { margin: 0; }
+.self-lookup-btn {
+  flex-shrink: 0; padding: 11px 16px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #fff; border: none; border-radius: var(--rsm);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+}
+.self-lookup-btn:disabled { opacity: .4; pointer-events: none; }
+.self-result-name {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.self-actions { display: flex; gap: 8px; margin-top: 4px; }
+.btn-danger-full {
+  flex: 1; padding: 11px;
+  background: rgba(220,38,38,.08); border: 1.5px solid rgba(220,38,38,.3);
+  border-radius: var(--r); color: var(--danger);
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+
 /* ═══ TIME BLOCK TAGS (participant list) ════ */
 .tb-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .tb-tag {
@@ -432,8 +471,11 @@ create table if not exists participants (
   status      text not null
               check (status in ('going','maybe','tbd')),
   comment     text not null default '',
+  threads_id  text not null default '',
   created_at  timestamptz not null default now()
 );
+-- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
+alter table participants add column if not exists threads_id text not null default '';
 
 -- テーブル: 設定
 create table if not exists settings (
@@ -636,6 +678,13 @@ alter publication supabase_realtime
         </div>
 
         <div class="field-wrap">
+          <label class="field-label" for="regThreadsId">Threads ID（任意）</label>
+          <input class="text-input" id="regThreadsId" type="text"
+            placeholder="例：@reality_40s" maxlength="40"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+
+        <div class="field-wrap">
           <label class="field-label" for="regComment">コメント（任意・40文字）</label>
           <input class="text-input" id="regComment" type="text"
             placeholder="例：19時ごろ合流予定" maxlength="40"
@@ -646,9 +695,25 @@ alter publication supabase_realtime
           登録する
         </button>
       </div>
-      <p style="font-size:11px;color:var(--muted);text-align:center">
-        ※ 変更・削除は管理者に依頼してください
-      </p>
+
+      <!-- 本人編集 -->
+      <button class="self-toggle" onclick="toggleSelfEdit()">
+        📝 すでに登録済みの方はこちら
+      </button>
+      <div class="form-card hidden" id="selfEditCard">
+        <div class="form-heading">📝 登録内容を変更・削除する</div>
+        <div class="field-wrap">
+          <label class="field-label">登録時の名前（完全一致）</label>
+          <div class="self-lookup-row">
+            <input class="text-input" id="selfNameInput" type="text"
+              placeholder="登録した名前を入力" maxlength="20"
+              autocomplete="off" autocorrect="off" autocapitalize="off"
+              onkeydown="if(event.key==='Enter')selfLookup()">
+            <button class="self-lookup-btn" id="selfLookupBtn" onclick="selfLookup()">呼び出す</button>
+          </div>
+        </div>
+        <div id="selfEditForm" class="hidden"></div>
+      </div>
     </div>
 
     <!-- ── 管理タブ ─────────────────────────── -->
@@ -964,7 +1029,8 @@ function renderList() {
         <div class="p-item">
           <div class="p-body">
             <div class="p-name-text">${esc(p.name)}</div>
-            ${p.comment ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+            ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
+            ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
             ${tbHtml}
           </div>
         </div>`;
@@ -990,9 +1056,10 @@ function renderRegTbCheckboxes() {
 
 /* ─── register ──────────────────────────── */
 async function register() {
-  const name    = id('regName').value.trim();
-  const status  = document.querySelector('input[name=regStatus]:checked')?.value ?? 'maybe';
-  const comment = id('regComment').value.trim();
+  const name       = id('regName').value.trim();
+  const status     = document.querySelector('input[name=regStatus]:checked')?.value ?? 'maybe';
+  const threads_id = id('regThreadsId').value.trim();
+  const comment    = id('regComment').value.trim();
 
   if (!name)  { toast('名前を入力してください', 'err'); return; }
   if (participants.some(p => p.name === name)) {
@@ -1004,7 +1071,7 @@ async function register() {
 
   setLoading('regBtn', true, '登録中…');
   const { data: inserted, error } = await sb
-    .from('participants').insert({ name, status, comment }).select('id');
+    .from('participants').insert({ name, status, comment, threads_id }).select('id');
   setLoading('regBtn', false, '登録する');
 
   if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
@@ -1016,8 +1083,9 @@ async function register() {
     );
   }
 
-  id('regName').value    = '';
-  id('regComment').value = '';
+  id('regName').value       = '';
+  id('regThreadsId').value  = '';
+  id('regComment').value    = '';
   document.getElementById('rs-maybe').checked = true;
   document.querySelectorAll('#regTbGroup input[type=checkbox]')
     .forEach(el => { el.checked = false; });
@@ -1142,7 +1210,8 @@ function renderAdminList() {
       <div class="p-item" id="ai-${i}">
         <div class="p-body">
           <div class="p-name-text">${em} ${esc(p.name)}</div>
-          ${p.comment ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+          ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
+          ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-sm btn-edit"   onclick="openEdit(${i})">編集</button>
@@ -1181,6 +1250,8 @@ function openEdit(i) {
             ${l}
           </label>`).join('')}
       </div>
+      <input class="inline-text-input" id="ei-tid-${i}"
+        value="${esc(p.threads_id??'')}" maxlength="40" placeholder="Threads ID（任意）">
       <input class="inline-text-input" id="ei-cmt-${i}"
         value="${esc(p.comment??'')}" maxlength="40" placeholder="コメント（任意）">
       ${tbHtml}
@@ -1192,15 +1263,16 @@ function openEdit(i) {
 }
 
 async function saveEdit(pid, i) {
-  const name    = id(`ei-name-${i}`).value.trim();
-  const status  = document.querySelector(`input[name="ei-st-${i}"]:checked`)?.value ?? 'maybe';
-  const comment = id(`ei-cmt-${i}`).value.trim();
+  const name       = id(`ei-name-${i}`).value.trim();
+  const status     = document.querySelector(`input[name="ei-st-${i}"]:checked`)?.value ?? 'maybe';
+  const threads_id = id(`ei-tid-${i}`).value.trim();
+  const comment    = id(`ei-cmt-${i}`).value.trim();
   if (!name) { toast('名前は必須です', 'err'); return; }
   if (participants.some((p, idx) => p.name === name && p.id !== pid)) {
     toast('その名前はすでに存在します', 'err'); return;
   }
   const { error } = await sb.from('participants')
-    .update({ name, status, comment }).eq('id', pid);
+    .update({ name, status, comment, threads_id }).eq('id', pid);
   if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
 
   /* 時間帯の更新: 既存を全削除してから再挿入 */
@@ -1222,6 +1294,132 @@ async function deletePart(pid, i) {
   const { error } = await sb.from('participants').delete().eq('id', pid);
   if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
   toast('削除しました');
+}
+
+/* ─── self edit (本人による編集) ────────── */
+function toggleSelfEdit() {
+  const card = id('selfEditCard');
+  const isHidden = card.classList.toggle('hidden');
+  if (!isHidden) id('selfNameInput')?.focus();
+  if (isHidden) {
+    id('selfEditForm').classList.add('hidden');
+    id('selfEditForm').innerHTML = '';
+    id('selfNameInput').value = '';
+  }
+}
+
+async function selfLookup() {
+  const name = id('selfNameInput').value.trim();
+  if (!name) { toast('名前を入力してください', 'err'); return; }
+
+  const btn = id('selfLookupBtn');
+  btn.disabled = true; btn.textContent = '検索中…';
+  const { data, error } = await sb
+    .from('participants').select('*').eq('name', name).maybeSingle();
+  btn.disabled = false; btn.textContent = '呼び出す';
+
+  if (error) { toast('検索失敗: ' + error.message, 'err'); return; }
+  if (!data)  { toast('その名前は登録されていません', 'err'); return; }
+
+  renderSelfEditForm(data);
+}
+
+function renderSelfEditForm(p) {
+  const selectedTbIds = participantTimeBlocks
+    .filter(r => r.participant_id === p.id)
+    .map(r => r.time_block_id);
+
+  const tbHtml = timeBlocks.length ? `
+    <div class="field-wrap">
+      <label class="field-label">参加できる時間帯（複数選択可）</label>
+      <div class="tb-check-group">
+        ${timeBlocks.map(tb => `
+          <div class="tb-check-item">
+            <input type="checkbox" id="se-tb-${tb.id}" value="${tb.id}"
+              ${selectedTbIds.includes(tb.id) ? 'checked' : ''}>
+            <label for="se-tb-${tb.id}">${esc(tb.label)}</label>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const form = id('selfEditForm');
+  form.innerHTML = `
+    <div class="self-result-name">✅ 「${esc(p.name)}」を呼び出しました</div>
+    <div class="field-wrap">
+      <label class="field-label">ステータス</label>
+      <div class="pill-group">
+        <input type="radio" name="se-status" id="se-going" value="going" ${p.status==='going'?'checked':''}>
+        <label class="pill-label" for="se-going">✅ 参加する</label>
+        <input type="radio" name="se-status" id="se-maybe" value="maybe" ${p.status==='maybe'?'checked':''}>
+        <label class="pill-label" for="se-maybe">🤔 検討中</label>
+        <input type="radio" name="se-status" id="se-tbd"   value="tbd"   ${p.status==='tbd'?'checked':''}>
+        <label class="pill-label" for="se-tbd">⏰ 時間未定</label>
+      </div>
+    </div>
+    ${tbHtml}
+    <div class="field-wrap">
+      <label class="field-label">Threads ID（任意）</label>
+      <input class="text-input" id="se-tid" type="text"
+        value="${esc(p.threads_id??'')}" maxlength="40"
+        placeholder="例：@reality_40s"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">コメント（任意・40文字）</label>
+      <input class="text-input" id="se-cmt" type="text"
+        value="${esc(p.comment??'')}" maxlength="40"
+        placeholder="例：19時ごろ合流予定"
+        autocomplete="off" autocorrect="off">
+    </div>
+    <div class="self-actions">
+      <button class="btn btn-primary" style="flex:2" id="seSaveBtn"
+        onclick="saveSelfEdit('${p.id}')">保存する</button>
+      <button class="btn-danger-full" id="seDeleteBtn"
+        onclick="deleteSelf('${p.id}','${esc(p.name)}')">削除</button>
+    </div>`;
+  form.classList.remove('hidden');
+}
+
+async function saveSelfEdit(pid) {
+  const status     = document.querySelector('input[name="se-status"]:checked')?.value ?? 'maybe';
+  const threads_id = id('se-tid').value.trim();
+  const comment    = id('se-cmt').value.trim();
+  const newTbIds   = [...document.querySelectorAll('[id^="se-tb-"]:checked')].map(el => el.value);
+
+  setLoading('seSaveBtn', true, '保存中…');
+  const { error } = await sb.from('participants')
+    .update({ status, comment, threads_id }).eq('id', pid);
+
+  if (!error) {
+    await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
+    if (newTbIds.length) {
+      await sb.from('participant_time_blocks').insert(
+        newTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+      );
+    }
+  }
+  setLoading('seSaveBtn', false, '保存する');
+
+  if (error) { toast('保存失敗: ' + error.message, 'err'); return; }
+  toast('更新しました！');
+  id('selfEditCard').classList.add('hidden');
+  id('selfEditForm').classList.add('hidden');
+  id('selfEditForm').innerHTML = '';
+  id('selfNameInput').value = '';
+}
+
+async function deleteSelf(pid, name) {
+  if (!confirm(`「${name}」の登録を削除しますか？`)) return;
+  setLoading('seDeleteBtn', true, '削除中…');
+  const { error } = await sb.from('participants').delete().eq('id', pid);
+  setLoading('seDeleteBtn', false, '削除');
+  if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
+  toast('削除しました');
+  id('selfEditCard').classList.add('hidden');
+  id('selfEditForm').classList.add('hidden');
+  id('selfEditForm').innerHTML = '';
+  id('selfNameInput').value = '';
+  switchTab(document.querySelector('[data-tab=list]'));
 }
 
 /* ─── admin: save settings ──────────────── */
