@@ -1103,15 +1103,16 @@ function applySettings() {
     id('noticeWrap').classList.add('hidden');
   }
 
-  /* admin fields */
-  id('adminTitle').value      = title;
-  id('adminEventDate').value  = eventDate;
-  id('adminStartTime').value  = startTime;
-  id('adminEndTime').value    = endTime;
-  id('adminPlace').value      = place;
-  id('adminPlaceUrl').value   = placeUrl;
-  id('adminNotes').value      = notes;
-  id('adminNotice').value     = notice;
+  /* admin fields — null guard in case panel is not yet in DOM */
+  const setVal = (elId, val) => { const el = id(elId); if (el) el.value = val; };
+  setVal('adminTitle',     title);
+  setVal('adminEventDate', eventDate);
+  setVal('adminStartTime', startTime);
+  setVal('adminEndTime',   endTime);
+  setVal('adminPlace',     place);
+  setVal('adminPlaceUrl',  placeUrl);
+  setVal('adminNotes',     notes);
+  setVal('adminNotice',    notice);
 }
 
 /* ─── realtime ──────────────────────────── */
@@ -1259,6 +1260,8 @@ async function adminLogin() {
   adminUnlocked = true;
   id('adminLockCard').classList.add('hidden');
   id('adminPanel').classList.remove('hidden');
+  /* フォームを最新データで再描画（パネル表示後に呼ぶことで確実に反映） */
+  await fetchSettings();
   renderTbAdmin();
   renderAdminList();
   if (timeBlocksTableError) {
