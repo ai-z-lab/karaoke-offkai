@@ -462,7 +462,7 @@ main { padding: 16px; }
 <!-- ══════════════════════════════════════════
      CONFIG SCREEN — 初回セットアップ
 ══════════════════════════════════════════ -->
-<div id="configScreen">
+<div id="configScreen" class="hidden">
   <div class="cfg-logo">🎤</div>
   <div class="cfg-title">オフ会 参加管理</div>
   <div class="cfg-sub">初回のみ設定が必要です<br>次回以降は自動で接続されます</div>
@@ -850,6 +850,10 @@ alter publication supabase_realtime
 <script>
 'use strict';
 
+/* ─── hardcoded defaults ────────────────── */
+const DEFAULT_SB_URL = 'https://dwptswglclsstzbkdnmb.supabase.co';
+const DEFAULT_SB_KEY = 'sb_publishable_zIF7ZiROUPJb-YcVX4v_4w_sf8kb8ik';
+
 /* ─── storage keys ──────────────────────── */
 const SK = {
   url:  'ok_sb_url',
@@ -869,12 +873,16 @@ let rtChannel             = null;
 
 /* ─── startup ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  const url = ls(SK.url);
-  const key = ls(SK.key);
-  if (url && key) {
-    sb = supabase.createClient(url, key);
-    bootApp();
+  /* ?setup をURLに付けると管理者用セットアップ画面を表示 */
+  if (location.search.includes('setup')) {
+    id('configScreen').classList.remove('hidden');
+    return;
   }
+  /* localStorageにカスタム接続情報があればそちらを優先、なければデフォルト値を使用 */
+  const url = ls(SK.url) || DEFAULT_SB_URL;
+  const key = ls(SK.key) || DEFAULT_SB_KEY;
+  sb = supabase.createClient(url, key);
+  bootApp();
 });
 
 /* ─── setup ─────────────────────────────── */
