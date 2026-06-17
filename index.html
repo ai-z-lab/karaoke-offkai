@@ -299,6 +299,30 @@ main { padding: 16px; }
 .toast-err  { background: var(--danger); color: #fff; }
 .toast-info { background: var(--accent2); color: #fff; }
 
+/* ═══ IMPORT MODAL ══════════════════════ */
+.import-modal-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(44,26,14,.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.import-modal-overlay.hidden { display: none; }
+.import-modal-box {
+  background: var(--card); border-radius: var(--r);
+  padding: 24px 20px; max-width: 480px; width: 100%;
+  max-height: 80dvh; display: flex; flex-direction: column;
+}
+.import-modal-title {
+  font-size: 16px; font-weight: 700; margin-bottom: 14px;
+}
+.import-modal-body {
+  overflow-y: auto; flex: 1; font-size: 14px; line-height: 1.7;
+}
+.import-result-item { padding: 4px 0; }
+.import-result-ok   { color: var(--going); }
+.import-result-skip { color: var(--muted); }
+.import-result-err  { color: var(--danger); }
+
 /* ═══ CONFIG SCREEN ═════════════════════ */
 #configScreen {
   min-height: 100dvh;
@@ -571,7 +595,25 @@ create policy "delete_ptb"
 
 -- Realtime
 alter publication supabase_realtime
-  add table participants, settings, time_blocks, participant_time_blocks;</pre>
+  add table participants, settings, time_blocks, participant_time_blocks;
+
+-- ════════════════════════════════════════════════════
+-- 既存DBへのマイグレーション（すでにテーブルがある場合のみ実行）
+-- ════════════════════════════════════════════════════
+-- ▼ settings に INSERT ポリシーを追加（必須）
+--   「保存失敗: new row violates row-level security policy」が出る場合はこれを実行
+--
+-- create policy "insert_settings"
+--   on settings for insert with check (true);
+--
+-- ▼ 新しいキーを追加（存在しない場合）
+--
+-- insert into settings (key, value) values
+--   ('event_date',       ''),
+--   ('event_start_time', ''),
+--   ('event_end_time',   ''),
+--   ('event_place_url',  '')
+-- on conflict (key) do nothing;</pre>
       <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
     </div>
 
@@ -856,6 +898,12 @@ alter publication supabase_realtime
             style="width:auto;padding:9px 20px;font-size:13px">
             📥 CSVをダウンロード
           </button>
+          <button class="btn btn-ghost" onclick="id('csvImportInput').click()"
+            style="width:auto;padding:9px 20px;font-size:13px">
+            📤 調整さんCSVインポート
+          </button>
+          <input type="file" id="csvImportInput" accept=".csv,text/csv"
+            style="display:none" onchange="importAdjustCSV(this)">
           <button class="btn btn-ghost" onclick="adminLogout()"
             style="width:auto;padding:9px 20px;font-size:13px">
             ログアウト
@@ -866,6 +914,15 @@ alter publication supabase_realtime
 
   </main>
 </div><!-- /appRoot -->
+
+<!-- CSVインポート結果モーダル -->
+<div id="importModal" class="import-modal-overlay hidden" onclick="if(event.target===this)closeImportModal()">
+  <div class="import-modal-box">
+    <div class="import-modal-title">📤 インポート結果</div>
+    <div id="importModalBody" class="import-modal-body"></div>
+    <button class="btn btn-primary" onclick="closeImportModal()" style="margin-top:16px">閉じる</button>
+  </div>
+</div>
 
 <div class="toast" id="toastEl"></div>
 
@@ -1358,6 +1415,161 @@ function downloadCSV() {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
   toast('CSVをダウンロードしました', 'info');
+}
+
+/* ─── CSV import (調整さん形式) ─────────── */
+
+/* RFC 4180 準拠の軽量CSVパーサー */
+function parseCSV(text) {
+  const rows = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const row = [];
+    while (i < n && text[i] !== '\n') {
+      if (text[i] === '"') {
+        /* quoted field */
+        i++;
+        let cell = '';
+        while (i < n) {
+          if (text[i] === '"') {
+            if (text[i + 1] === '"') { cell += '"'; i += 2; }
+            else { i++; break; }
+          } else {
+            cell += text[i++];
+          }
+        }
+        row.push(cell);
+        if (text[i] === ',') i++;
+      } else {
+        /* unquoted field */
+        let start = i;
+        while (i < n && text[i] !== ',' && text[i] !== '\n') i++;
+        row.push(text.slice(start, i));
+        if (text[i] === ',') i++;
+      }
+    }
+    if (text[i] === '\n') i++;
+    if (row.length > 0 && !(row.length === 1 && row[0] === '')) rows.push(row);
+  }
+  return rows;
+}
+
+function closeImportModal() {
+  id('importModal').classList.add('hidden');
+  id('csvImportInput').value = '';
+}
+
+async function importAdjustCSV(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  /* ファイル読み込み（BOM除去） */
+  const raw = await file.text();
+  const text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  const allRows = parseCSV(text);
+  if (allRows.length < 2) { toast('CSVの形式が読み取れませんでした', 'err'); return; }
+
+  /* ヘッダー行を探す（1列目が「日程」の行） */
+  let headerIdx = -1;
+  for (let i = 0; i < allRows.length; i++) {
+    if (allRows[i][0]?.trim() === '日程') { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) { toast('ヘッダー行（「日程」列）が見つかりません', 'err'); return; }
+
+  const headerRow   = allRows[headerIdx];
+  const dataRows    = allRows.slice(headerIdx + 1);
+
+  /* コメント行（最終行）と時間帯行を分離 */
+  const commentRow  = dataRows[dataRows.length - 1];
+  const tbRows      = dataRows.slice(0, dataRows.length - 1);
+
+  /* 時間帯ブロックとCSV時間帯行を順番で対応づけ */
+  const sortedBlocks = [...timeBlocks].sort((a, b) => a.sort_order - b.sort_order);
+
+  /* 参加者列（2列目以降）を解析 */
+  const importResults = [];
+  const insertJobs    = [];
+
+  for (let col = 1; col < headerRow.length; col++) {
+    const raw = (headerRow[col] ?? '').trim();
+    if (!raw) continue;
+
+    /* 「名前 ThreadsID」を空白（全角/半角）で分割 */
+    const spaceMatch = raw.match(/^(.+?)[\s　]+(@\S+)$/);
+    const name       = spaceMatch ? spaceMatch[1].trim() : raw;
+    const threads_id = spaceMatch ? spaceMatch[2].trim() : '';
+
+    /* 重複チェック */
+    if (participants.some(p => p.name === name)) {
+      importResults.push({ name, status: 'skip', reason: '既に登録済み（スキップ）' });
+      continue;
+    }
+
+    /* ◯の有無でステータス判定 */
+    const hasAttend  = tbRows.some(r => (r[col] ?? '').trim() === '◯');
+    const status     = hasAttend ? 'going' : 'tbd';
+
+    /* コメント */
+    const comment    = (commentRow?.[col] ?? '').trim();
+
+    /* 時間帯ブロックの選択（CSV順↔sortedBlocks順で対応） */
+    const selectedTbIds = sortedBlocks
+      .filter((_, tbIdx) => (tbRows[tbIdx]?.[col] ?? '').trim() === '◯')
+      .map(tb => tb.id);
+
+    insertJobs.push({ name, status, threads_id, comment, selectedTbIds });
+  }
+
+  if (!insertJobs.length && !importResults.length) {
+    toast('インポート対象の参加者が見つかりませんでした', 'err'); return;
+  }
+
+  /* DB登録 */
+  toast('インポート中…', 'info');
+  for (const job of insertJobs) {
+    const { data: inserted, error } = await sb
+      .from('participants')
+      .insert({ name: job.name, status: job.status,
+                threads_id: job.threads_id, comment: job.comment,
+                residence: '' })
+      .select('id');
+
+    if (error) {
+      importResults.push({ name: job.name, status: 'err', reason: error.message });
+      continue;
+    }
+
+    const pid = inserted?.[0]?.id;
+    if (pid && job.selectedTbIds.length) {
+      await sb.from('participant_time_blocks').insert(
+        job.selectedTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+      );
+    }
+    importResults.push({ name: job.name, status: 'ok',
+      reason: job.status === 'going' ? '出席で登録' : '時間未定で登録' });
+  }
+
+  await fetchParticipants();
+
+  /* 結果モーダル表示 */
+  const okCount   = importResults.filter(r => r.status === 'ok').length;
+  const skipCount = importResults.filter(r => r.status === 'skip').length;
+  const errCount  = importResults.filter(r => r.status === 'err').length;
+
+  const summaryHtml = `<div style="margin-bottom:10px;font-weight:700">
+    ✅ 登録: ${okCount}人　⏭️ スキップ: ${skipCount}人　❌ エラー: ${errCount}人
+  </div>`;
+  const listHtml = importResults.map(r => {
+    const cls = r.status === 'ok' ? 'import-result-ok'
+              : r.status === 'skip' ? 'import-result-skip' : 'import-result-err';
+    const icon = r.status === 'ok' ? '✅' : r.status === 'skip' ? '⏭️' : '❌';
+    return `<div class="import-result-item ${cls}">${icon} ${esc(r.name)} — ${esc(r.reason)}</div>`;
+  }).join('');
+
+  id('importModalBody').innerHTML = summaryHtml + listHtml;
+  id('importModal').classList.remove('hidden');
 }
 
 /* ─── admin: render list ────────────────── */
