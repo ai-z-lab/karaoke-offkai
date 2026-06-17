@@ -352,10 +352,20 @@ main { padding: 16px; }
   cursor: pointer; font-family: inherit;
 }
 
-/* ═══ THREADS ID ════════════════════════════ */
+/* ═══ THREADS ID / RESIDENCE ════════════════ */
 .p-threads-id {
   font-size: 11px; color: var(--accent); font-weight: 600;
   margin-top: 1px; word-break: break-all;
+}
+.p-residence {
+  font-size: 11px; color: var(--muted); margin-top: 1px;
+}
+
+/* ═══ TIME BLOCKS ERROR NOTICE ══════════════ */
+.tb-error-notice {
+  background: rgba(220,38,38,.07); border: 1px solid rgba(220,38,38,.25);
+  border-radius: var(--rsm); padding: 10px 13px; margin-bottom: 8px;
+  font-size: 12px; color: var(--danger); line-height: 1.7;
 }
 
 /* ═══ SELF EDIT ══════════════════════════════ */
@@ -472,10 +482,12 @@ create table if not exists participants (
               check (status in ('going','maybe','tbd')),
   comment     text not null default '',
   threads_id  text not null default '',
+  residence   text not null default '',
   created_at  timestamptz not null default now()
 );
 -- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
 alter table participants add column if not exists threads_id text not null default '';
+alter table participants add column if not exists residence  text not null default '';
 
 -- テーブル: 設定
 create table if not exists settings (
@@ -678,6 +690,13 @@ alter publication supabase_realtime
         </div>
 
         <div class="field-wrap">
+          <label class="field-label" for="regResidence">お住まい（任意）</label>
+          <input class="text-input" id="regResidence" type="text"
+            placeholder="例：鳥取市、米子市など" maxlength="40"
+            autocomplete="off" autocorrect="off">
+        </div>
+
+        <div class="field-wrap">
           <label class="field-label" for="regThreadsId">Threads ID（任意）</label>
           <input class="text-input" id="regThreadsId" type="text"
             placeholder="例：@your_id" maxlength="40"
@@ -844,6 +863,7 @@ let participants          = [];
 let settings              = {};   // key→value map
 let timeBlocks            = [];   // [{id, label, sort_order}]
 let participantTimeBlocks = [];   // [{participant_id, time_block_id}]
+let timeBlocksTableError  = false; // true if time_blocks table missing in Supabase
 let adminUnlocked         = false;
 let rtChannel             = null;
 
@@ -915,7 +935,15 @@ async function fetchTimeBlocks() {
   const { data, error } = await sb
     .from('time_blocks').select('*')
     .order('sort_order', { ascending: true });
-  if (error) { console.error(error); return; }
+  if (error) {
+    console.error(error);
+    timeBlocksTableError = true;
+    timeBlocks = [];
+    renderRegTbCheckboxes();
+    if (adminUnlocked) renderTbAdmin();
+    return;
+  }
+  timeBlocksTableError = false;
   timeBlocks = data ?? [];
   renderRegTbCheckboxes();
   if (adminUnlocked) renderTbAdmin();
@@ -1029,6 +1057,7 @@ function renderList() {
         <div class="p-item">
           <div class="p-body">
             <div class="p-name-text">${esc(p.name)}</div>
+            ${p.residence  ? `<div class="p-residence">📍 ${esc(p.residence)}</div>` : ''}
             ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
             ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
             ${tbHtml}
@@ -1058,6 +1087,7 @@ function renderRegTbCheckboxes() {
 async function register() {
   const name       = id('regName').value.trim();
   const status     = document.querySelector('input[name=regStatus]:checked')?.value ?? 'maybe';
+  const residence  = id('regResidence').value.trim();
   const threads_id = id('regThreadsId').value.trim();
   const comment    = id('regComment').value.trim();
 
@@ -1071,7 +1101,7 @@ async function register() {
 
   setLoading('regBtn', true, '登録中…');
   const { data: inserted, error } = await sb
-    .from('participants').insert({ name, status, comment, threads_id }).select('id');
+    .from('participants').insert({ name, status, comment, residence, threads_id }).select('id');
   setLoading('regBtn', false, '登録する');
 
   if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
@@ -1084,6 +1114,7 @@ async function register() {
   }
 
   id('regName').value       = '';
+  id('regResidence').value  = '';
   id('regThreadsId').value  = '';
   id('regComment').value    = '';
   document.getElementById('rs-maybe').checked = true;
@@ -1111,6 +1142,9 @@ async function adminLogin() {
   id('adminPanel').classList.remove('hidden');
   renderTbAdmin();
   renderAdminList();
+  if (timeBlocksTableError) {
+    toast('⚠️ time_blocksテーブルが未作成です。セットアップSQLを再実行してください', 'err');
+  }
   toast('管理者モード ON', 'info');
 }
 
@@ -1126,8 +1160,15 @@ function adminLogout() {
 function renderTbAdmin() {
   const c = id('tbAdminList');
   if (!c) return;
+  if (timeBlocksTableError) {
+    c.innerHTML = `<div class="tb-error-notice">
+      ⚠️ <b>time_blocks テーブルが見つかりません。</b><br>
+      セットアップ画面の SQL をコピーして Supabase の SQL Editor で再実行してください。
+    </div>`;
+    return;
+  }
   if (!timeBlocks.length) {
-    c.innerHTML = '<div class="empty-state" style="padding:16px 0">まだ時間帯がありません</div>';
+    c.innerHTML = '<div class="empty-state" style="padding:16px 0">まだ時間帯がありません。下の入力欄から追加してください。</div>';
     return;
   }
   c.innerHTML = timeBlocks.map((tb, i) => `
@@ -1210,6 +1251,7 @@ function renderAdminList() {
       <div class="p-item" id="ai-${i}">
         <div class="p-body">
           <div class="p-name-text">${em} ${esc(p.name)}</div>
+          ${p.residence  ? `<div class="p-residence">📍 ${esc(p.residence)}</div>` : ''}
           ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
           ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
         </div>
@@ -1250,6 +1292,8 @@ function openEdit(i) {
             ${l}
           </label>`).join('')}
       </div>
+      <input class="inline-text-input" id="ei-res-${i}"
+        value="${esc(p.residence??'')}" maxlength="40" placeholder="お住まい（任意）">
       <input class="inline-text-input" id="ei-tid-${i}"
         value="${esc(p.threads_id??'')}" maxlength="40" placeholder="Threads ID（任意）">
       <input class="inline-text-input" id="ei-cmt-${i}"
@@ -1265,6 +1309,7 @@ function openEdit(i) {
 async function saveEdit(pid, i) {
   const name       = id(`ei-name-${i}`).value.trim();
   const status     = document.querySelector(`input[name="ei-st-${i}"]:checked`)?.value ?? 'maybe';
+  const residence  = id(`ei-res-${i}`).value.trim();
   const threads_id = id(`ei-tid-${i}`).value.trim();
   const comment    = id(`ei-cmt-${i}`).value.trim();
   if (!name) { toast('名前は必須です', 'err'); return; }
@@ -1272,7 +1317,7 @@ async function saveEdit(pid, i) {
     toast('その名前はすでに存在します', 'err'); return;
   }
   const { error } = await sb.from('participants')
-    .update({ name, status, comment, threads_id }).eq('id', pid);
+    .update({ name, status, comment, residence, threads_id }).eq('id', pid);
   if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
 
   /* 時間帯の更新: 既存を全削除してから再挿入 */
@@ -1358,6 +1403,13 @@ function renderSelfEditForm(p) {
     </div>
     ${tbHtml}
     <div class="field-wrap">
+      <label class="field-label">お住まい（任意）</label>
+      <input class="text-input" id="se-res" type="text"
+        value="${esc(p.residence??'')}" maxlength="40"
+        placeholder="例：鳥取市、米子市など"
+        autocomplete="off" autocorrect="off">
+    </div>
+    <div class="field-wrap">
       <label class="field-label">Threads ID（任意）</label>
       <input class="text-input" id="se-tid" type="text"
         value="${esc(p.threads_id??'')}" maxlength="40"
@@ -1382,13 +1434,14 @@ function renderSelfEditForm(p) {
 
 async function saveSelfEdit(pid) {
   const status     = document.querySelector('input[name="se-status"]:checked')?.value ?? 'maybe';
+  const residence  = id('se-res').value.trim();
   const threads_id = id('se-tid').value.trim();
   const comment    = id('se-cmt').value.trim();
   const newTbIds   = [...document.querySelectorAll('[id^="se-tb-"]:checked')].map(el => el.value);
 
   setLoading('seSaveBtn', true, '保存中…');
   const { error } = await sb.from('participants')
-    .update({ status, comment, threads_id }).eq('id', pid);
+    .update({ status, comment, residence, threads_id }).eq('id', pid);
 
   if (!error) {
     await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
