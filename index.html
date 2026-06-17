@@ -3,29 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0d0b18">
+<meta name="theme-color" content="#fdf6ec">
 <title>カラオケオフ会 参加管理</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 /* ═══════════════════════════════════════
    DESIGN TOKENS
-   夜の会場＋スポットライト：深い紫紺の空間に
-   マゼンタとシアンの2色スポット。
-   看板の蛍光管をイメージした signature glow。
+   明るい会場＋暖色スポット：クリーム色の空間に
+   テラコッタとマンゴーオレンジの2色。
+   カラオケらしい賑やかで親しみやすい雰囲気。
 ═══════════════════════════════════════ */
 :root {
-  --bg:        #0d0b18;
-  --surface:   #161326;
-  --card:      #1e1a30;
-  --border:    #2d2848;
-  --accent:    #d946ef;   /* magenta spotlight */
-  --accent2:   #22d3ee;   /* cyan spotlight    */
-  --going:     #4ade80;
-  --maybe:     #fbbf24;
-  --tbd:       #94a3b8;
-  --text:      #ede9ff;
-  --muted:     #7c75a8;
-  --danger:    #f87171;
+  --bg:        #fdf6ec;
+  --surface:   #fff8f0;
+  --card:      #ffffff;
+  --border:    #f0d9c0;
+  --accent:    #e05c2a;   /* terracotta orange */
+  --accent2:   #f5a623;   /* mango orange      */
+  --going:     #2e9e5b;
+  --maybe:     #d97706;
+  --tbd:       #7a8fa6;
+  --text:      #2c1a0e;
+  --muted:     #8a6a50;
+  --danger:    #dc2626;
   --r:         14px;
   --rsm:       9px;
   --rp:        99px;
@@ -47,7 +47,7 @@ body {
 /* ═══ HEADER ═══════════════════════════ */
 .app-header {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(13,11,24,.94);
+  background: rgba(253,246,236,.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
@@ -69,13 +69,13 @@ body {
 /* signature: live indicator with glow */
 .live-pill {
   display: inline-flex; align-items: center; gap: 5px;
-  background: rgba(74,222,128,.1);
-  border: 1px solid rgba(74,222,128,.35);
+  background: rgba(46,158,91,.1);
+  border: 1px solid rgba(46,158,91,.35);
   border-radius: var(--rp);
   padding: 3px 10px; flex-shrink: 0; margin-top: 2px;
   font-size: 10px; font-weight: 800; letter-spacing: .06em;
   color: var(--going);
-  box-shadow: 0 0 8px rgba(74,222,128,.2);
+  box-shadow: 0 0 8px rgba(46,158,91,.2);
 }
 .live-dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -94,11 +94,11 @@ body {
 /* notice banner */
 .notice-wrap { margin-bottom: 12px; }
 .notice-banner {
-  background: linear-gradient(90deg,rgba(217,70,239,.13),rgba(34,211,238,.08));
-  border: 1px solid rgba(217,70,239,.3);
+  background: linear-gradient(90deg,rgba(224,92,42,.1),rgba(245,166,35,.08));
+  border: 1px solid rgba(224,92,42,.3);
   border-radius: var(--rsm);
   padding: 9px 13px;
-  font-size: 12px; color: #e8d8ff; line-height: 1.7;
+  font-size: 12px; color: var(--text); line-height: 1.7;
   white-space: pre-wrap; word-break: break-all;
 }
 .notice-eyebrow {
@@ -134,6 +134,7 @@ main { padding: 16px; }
 .stat-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--r); padding: 13px 6px; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
 .stat-num { font-size: 32px; font-weight: 800; line-height: 1; }
 .stat-num.going   { color: var(--going); }
@@ -160,6 +161,7 @@ main { padding: 16px; }
 .p-item {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--rsm); padding: 11px 13px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 7px;
 }
@@ -173,6 +175,7 @@ main { padding: 16px; }
 .form-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--r); padding: 18px; margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
 .form-heading {
   font-size: 14px; font-weight: 700; color: var(--accent2);
@@ -212,11 +215,11 @@ main { padding: 16px; }
   transition: all .18s; white-space: nowrap;
 }
 .pill-group input[value=going]:checked   + .pill-label {
-  border-color: var(--going); color: var(--going); background: rgba(74,222,128,.1); }
+  border-color: var(--going); color: var(--going); background: rgba(46,158,91,.1); }
 .pill-group input[value=maybe]:checked   + .pill-label {
-  border-color: var(--maybe); color: var(--maybe); background: rgba(251,191,36,.1); }
+  border-color: var(--maybe); color: var(--maybe); background: rgba(217,119,6,.1); }
 .pill-group input[value=tbd]:checked     + .pill-label {
-  border-color: var(--tbd);   color: var(--tbd);   background: rgba(148,163,184,.1); }
+  border-color: var(--tbd);   color: var(--tbd);   background: rgba(122,143,166,.1); }
 
 /* ═══ BUTTONS ════════════════════════════ */
 .btn {
@@ -230,16 +233,16 @@ main { padding: 16px; }
 .btn:disabled { opacity: .4; pointer-events: none; }
 .btn-primary {
   background: linear-gradient(90deg, var(--accent), var(--accent2));
-  color: #0d0b18;
+  color: #fff;
 }
 .btn-sm {
   display: inline-flex; align-items: center;
   width: auto; padding: 5px 12px;
   font-size: 11px; font-weight: 700; border-radius: 7px;
 }
-.btn-edit   { background: rgba(34,211,238,.12); color: var(--accent2); border: 1px solid rgba(34,211,238,.28); }
-.btn-delete { background: rgba(248,113,113,.12); color: var(--danger);  border: 1px solid rgba(248,113,113,.28); }
-.btn-ghost  { background: rgba(255,255,255,.06); color: var(--muted);   border: 1px solid var(--border); }
+.btn-edit   { background: rgba(245,166,35,.12);  color: #b07000;        border: 1px solid rgba(245,166,35,.4); }
+.btn-delete { background: rgba(220,38,38,.09);  color: var(--danger);  border: 1px solid rgba(220,38,38,.3); }
+.btn-ghost  { background: rgba(0,0,0,.04);      color: var(--muted);   border: 1px solid var(--border); }
 
 /* ═══ ADMIN INLINE EDIT ════════════════= */
 .inline-edit-wrap { flex: 1; min-width: 0; }
@@ -268,7 +271,7 @@ main { padding: 16px; }
 /* ═══ SPINNER ════════════════════════════ */
 .spinner {
   display: inline-block; width: 13px; height: 13px;
-  border: 2px solid rgba(255,255,255,.2);
+  border: 2px solid rgba(255,255,255,.35);
   border-top-color: #fff; border-radius: 50%;
   animation: spin .55s linear infinite;
   vertical-align: middle; margin-right: 5px;
@@ -288,9 +291,9 @@ main { padding: 16px; }
 .toast.show {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
-.toast-ok   { background: var(--going);  color: #051a0c; }
+.toast-ok   { background: var(--going);  color: #fff; }
 .toast-err  { background: var(--danger); color: #fff; }
-.toast-info { background: var(--accent2); color: #001a22; }
+.toast-info { background: var(--accent2); color: #fff; }
 
 /* ═══ CONFIG SCREEN ═════════════════════ */
 #configScreen {
@@ -299,8 +302,8 @@ main { padding: 16px; }
   align-items: center; justify-content: center;
   padding: 28px 20px;
   background:
-    radial-gradient(ellipse 70% 40% at 70% 10%, rgba(217,70,239,.18) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 35% at 20% 85%, rgba(34,211,238,.12) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 40% at 70% 10%, rgba(224,92,42,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 35% at 20% 85%, rgba(245,166,35,.1) 0%, transparent 65%),
     var(--bg);
 }
 .cfg-logo { font-size: 52px; margin-bottom: 6px; }
@@ -314,6 +317,7 @@ main { padding: 16px; }
 .cfg-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--r); padding: 20px; width: 100%; max-width: 420px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
 .cfg-section-title {
   font-size: 11px; font-weight: 800; letter-spacing: .08em;
@@ -321,12 +325,12 @@ main { padding: 16px; }
 }
 .cfg-hint {
   font-size: 11px; color: var(--muted); line-height: 1.75;
-  background: rgba(34,211,238,.06); border: 1px solid rgba(34,211,238,.18);
+  background: rgba(245,166,35,.08); border: 1px solid rgba(245,166,35,.3);
   border-radius: var(--rsm); padding: 11px 13px; margin-bottom: 16px;
 }
-.cfg-hint a { color: var(--accent2); text-decoration: none; }
+.cfg-hint a { color: var(--accent); text-decoration: none; }
 .cfg-hint code {
-  background: rgba(255,255,255,.08); padding: 1px 5px;
+  background: rgba(0,0,0,.06); padding: 1px 5px;
   border-radius: 4px; font-size: 11px; font-family: monospace;
 }
 .sql-block-wrap {
@@ -335,17 +339,69 @@ main { padding: 16px; }
 .sql-block {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--rsm); padding: 11px 13px;
-  font-size: 10.5px; color: #93c5fd; line-height: 1.7;
+  font-size: 10.5px; color: #7c4a00; line-height: 1.7;
   font-family: 'Menlo', monospace; white-space: pre;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
   max-height: 180px; overflow-y: auto;
 }
 .sql-copy-btn {
   position: absolute; top: 7px; right: 7px;
-  background: rgba(34,211,238,.15); border: 1px solid rgba(34,211,238,.3);
-  color: var(--accent2); padding: 4px 11px;
+  background: rgba(224,92,42,.12); border: 1px solid rgba(224,92,42,.3);
+  color: var(--accent); padding: 4px 11px;
   border-radius: 6px; font-size: 11px; font-weight: 700;
   cursor: pointer; font-family: inherit;
+}
+
+/* ═══ TIME BLOCK TAGS (participant list) ════ */
+.tb-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.tb-tag {
+  display: inline-flex; align-items: center;
+  background: rgba(224,92,42,.1); border: 1px solid rgba(224,92,42,.3);
+  color: var(--accent); border-radius: var(--rp);
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ═══ TIME BLOCK CHECKBOXES (registration) ══ */
+.tb-check-group { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.tb-check-item { display: flex; align-items: center; gap: 6px; }
+.tb-check-item input[type=checkbox] {
+  accent-color: var(--accent); width: 16px; height: 16px;
+  flex-shrink: 0; cursor: pointer;
+}
+.tb-check-item label {
+  font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap;
+}
+
+/* ═══ TIME BLOCK ADMIN LIST ═════════════════ */
+.tb-admin-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 9px 11px;
+  margin-bottom: 6px;
+}
+.tb-admin-label { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.tb-admin-inline { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.tb-admin-inline input {
+  flex: 1; background: var(--card); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 5px 9px;
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+.tb-move-btn {
+  background: rgba(0,0,0,.05); border: 1px solid var(--border);
+  color: var(--muted); width: 28px; height: 28px;
+  border-radius: 6px; font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-family: inherit;
+}
+.tb-add-row { display: flex; gap: 8px; margin-top: 10px; }
+.tb-add-row .text-input { margin: 0; }
+.tb-add-btn {
+  flex-shrink: 0; padding: 11px 16px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #fff; border: none; border-radius: var(--rsm);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  white-space: nowrap;
 }
 
 /* hide/show */
@@ -385,6 +441,20 @@ create table if not exists settings (
   value text not null default ''
 );
 
+-- テーブル: 時間帯ブロック
+create table if not exists time_blocks (
+  id         uuid primary key default gen_random_uuid(),
+  label      text not null,
+  sort_order integer not null default 0
+);
+
+-- テーブル: 参加者↔時間帯ブロック（中間テーブル）
+create table if not exists participant_time_blocks (
+  participant_id uuid references participants(id) on delete cascade,
+  time_block_id  uuid references time_blocks(id)  on delete cascade,
+  primary key (participant_id, time_block_id)
+);
+
 -- 初期データ
 insert into settings (key, value) values
   ('event_title',   'カラオケオフ会'),
@@ -396,8 +466,10 @@ insert into settings (key, value) values
 on conflict (key) do nothing;
 
 -- RLS 有効化
-alter table participants enable row level security;
-alter table settings     enable row level security;
+alter table participants            enable row level security;
+alter table settings                enable row level security;
+alter table time_blocks             enable row level security;
+alter table participant_time_blocks enable row level security;
 
 -- participants: 全員が読み書き可
 create policy "read_participants"
@@ -409,18 +481,33 @@ create policy "update_participants"
 create policy "delete_participants"
   on participants for delete using (true);
 
--- settings: 全員が読める
---           書き込みはサーバーキー(service_role)のみ
---           → フロントからは update を service_role 経由で行う
---           MVP では update も許可（注意事項を読むこと）
+-- settings: 全員が読み書き可（内輪利用前提）
 create policy "read_settings"
   on settings for select using (true);
 create policy "update_settings"
   on settings for update using (true);
 
+-- time_blocks: 全員が読み書き可
+create policy "read_time_blocks"
+  on time_blocks for select using (true);
+create policy "insert_time_blocks"
+  on time_blocks for insert with check (true);
+create policy "update_time_blocks"
+  on time_blocks for update using (true);
+create policy "delete_time_blocks"
+  on time_blocks for delete using (true);
+
+-- participant_time_blocks: 全員が読み書き可
+create policy "read_ptb"
+  on participant_time_blocks for select using (true);
+create policy "insert_ptb"
+  on participant_time_blocks for insert with check (true);
+create policy "delete_ptb"
+  on participant_time_blocks for delete using (true);
+
 -- Realtime
 alter publication supabase_realtime
-  add table participants, settings;</pre>
+  add table participants, settings, time_blocks, participant_time_blocks;</pre>
       <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
     </div>
 
@@ -543,6 +630,11 @@ alter publication supabase_realtime
           </div>
         </div>
 
+        <div class="field-wrap hidden" id="regTbWrap">
+          <label class="field-label">参加できる時間帯（任意・複数選択可）</label>
+          <div class="tb-check-group" id="regTbGroup"></div>
+        </div>
+
         <div class="field-wrap">
           <label class="field-label" for="regComment">コメント（任意・40文字）</label>
           <input class="text-input" id="regComment" type="text"
@@ -633,6 +725,21 @@ alter publication supabase_realtime
           </p>
         </div>
 
+        <!-- 時間帯ブロック管理 -->
+        <div class="form-card">
+          <div class="form-heading">⏰ 時間帯ブロック管理</div>
+          <div id="tbAdminList">
+            <div class="empty-state" style="padding:16px 0">まだ時間帯がありません</div>
+          </div>
+          <div class="tb-add-row">
+            <input class="text-input" id="tbNewLabel" type="text"
+              placeholder="例：お昼、夕方、夜など（20文字）" maxlength="20"
+              autocomplete="off" autocorrect="off"
+              onkeydown="if(event.key==='Enter')addTimeBlock()">
+            <button class="tb-add-btn" id="tbAddBtn" onclick="addTimeBlock()">＋ 追加</button>
+          </div>
+        </div>
+
         <!-- 参加者管理 -->
         <div class="section-label">参加者を編集・削除</div>
         <div id="adminListContainer">
@@ -667,11 +774,13 @@ const SK = {
 };
 
 /* ─── state ─────────────────────────────── */
-let sb            = null;
-let participants  = [];
-let settings      = {};   // key→value map
-let adminUnlocked = false;
-let rtChannel     = null;
+let sb                    = null;
+let participants          = [];
+let settings              = {};   // key→value map
+let timeBlocks            = [];   // [{id, label, sort_order}]
+let participantTimeBlocks = [];   // [{participant_id, time_block_id}]
+let adminUnlocked         = false;
+let rtChannel             = null;
 
 /* ─── startup ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -725,7 +834,7 @@ function copySQL() {
 async function bootApp() {
   id('configScreen').classList.add('hidden');
   id('appRoot').classList.remove('hidden');
-  await Promise.all([fetchSettings(), fetchParticipants()]);
+  await Promise.all([fetchSettings(), fetchTimeBlocks(), fetchParticipants()]);
   subscribeRealtime();
 }
 
@@ -737,12 +846,24 @@ async function fetchSettings() {
   applySettings();
 }
 
-async function fetchParticipants() {
+async function fetchTimeBlocks() {
   const { data, error } = await sb
-    .from('participants').select('*')
-    .order('created_at', { ascending: true });
+    .from('time_blocks').select('*')
+    .order('sort_order', { ascending: true });
   if (error) { console.error(error); return; }
-  participants = data ?? [];
+  timeBlocks = data ?? [];
+  renderRegTbCheckboxes();
+  if (adminUnlocked) renderTbAdmin();
+}
+
+async function fetchParticipants() {
+  const [partRes, ptbRes] = await Promise.all([
+    sb.from('participants').select('*').order('created_at', { ascending: true }),
+    sb.from('participant_time_blocks').select('*'),
+  ]);
+  if (partRes.error) { console.error(partRes.error); return; }
+  participants          = partRes.data ?? [];
+  participantTimeBlocks = ptbRes.data  ?? [];
   renderList();
   if (adminUnlocked) renderAdminList();
 }
@@ -789,8 +910,14 @@ function subscribeRealtime() {
         { event: '*', schema: 'public', table: 'participants' },
         () => fetchParticipants())
     .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'participant_time_blocks' },
+        () => fetchParticipants())
+    .on('postgres_changes',
         { event: '*', schema: 'public', table: 'settings' },
         () => fetchSettings())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'time_blocks' },
+        () => fetchTimeBlocks())
     .subscribe();
 }
 
@@ -825,17 +952,40 @@ function renderList() {
           <div class="g-count">${grp.length}人</div>
         </div>`;
     grp.forEach(p => {
+      const ptbs = participantTimeBlocks
+        .filter(r => r.participant_id === p.id)
+        .map(r => timeBlocks.find(tb => tb.id === r.time_block_id))
+        .filter(Boolean)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      const tbHtml = ptbs.length
+        ? `<div class="tb-tags">${ptbs.map(tb => `<span class="tb-tag">⏰ ${esc(tb.label)}</span>`).join('')}</div>`
+        : '';
       html += `
         <div class="p-item">
           <div class="p-body">
             <div class="p-name-text">${esc(p.name)}</div>
             ${p.comment ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+            ${tbHtml}
           </div>
         </div>`;
     });
     html += `</div>`;
   });
   c.innerHTML = html;
+}
+
+/* ─── time block checkboxes (registration) ── */
+function renderRegTbCheckboxes() {
+  const wrap  = id('regTbWrap');
+  const group = id('regTbGroup');
+  if (!wrap || !group) return;
+  if (!timeBlocks.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  group.innerHTML = timeBlocks.map(tb => `
+    <div class="tb-check-item">
+      <input type="checkbox" id="rtb-${tb.id}" value="${tb.id}">
+      <label for="rtb-${tb.id}">${esc(tb.label)}</label>
+    </div>`).join('');
 }
 
 /* ─── register ──────────────────────────── */
@@ -849,15 +999,28 @@ async function register() {
     toast('その名前はすでに登録されています', 'err'); return;
   }
 
+  const checkedTbIds = [...document.querySelectorAll('#regTbGroup input[type=checkbox]:checked')]
+    .map(el => el.value);
+
   setLoading('regBtn', true, '登録中…');
-  const { error } = await sb.from('participants').insert({ name, status, comment });
+  const { data: inserted, error } = await sb
+    .from('participants').insert({ name, status, comment }).select('id');
   setLoading('regBtn', false, '登録する');
 
   if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
 
-  id('regName').value = '';
+  if (checkedTbIds.length && inserted?.[0]?.id) {
+    const pid = inserted[0].id;
+    await sb.from('participant_time_blocks').insert(
+      checkedTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+    );
+  }
+
+  id('regName').value    = '';
   id('regComment').value = '';
   document.getElementById('rs-maybe').checked = true;
+  document.querySelectorAll('#regTbGroup input[type=checkbox]')
+    .forEach(el => { el.checked = false; });
   toast('登録しました！');
   switchTab(document.querySelector('[data-tab=list]'));
 }
@@ -878,6 +1041,7 @@ async function adminLogin() {
   adminUnlocked = true;
   id('adminLockCard').classList.add('hidden');
   id('adminPanel').classList.remove('hidden');
+  renderTbAdmin();
   renderAdminList();
   toast('管理者モード ON', 'info');
 }
@@ -888,6 +1052,81 @@ function adminLogout() {
   id('adminPanel').classList.add('hidden');
   id('adminPwInput').value = '';
   toast('ログアウトしました');
+}
+
+/* ─── admin: time block management ─────── */
+function renderTbAdmin() {
+  const c = id('tbAdminList');
+  if (!c) return;
+  if (!timeBlocks.length) {
+    c.innerHTML = '<div class="empty-state" style="padding:16px 0">まだ時間帯がありません</div>';
+    return;
+  }
+  c.innerHTML = timeBlocks.map((tb, i) => `
+    <div class="tb-admin-item" id="tba-${tb.id}">
+      <div class="tb-admin-label">${esc(tb.label)}</div>
+      <button class="tb-move-btn" onclick="moveTb('${tb.id}',-1)" ${i===0?'disabled':''}>▲</button>
+      <button class="tb-move-btn" onclick="moveTb('${tb.id}',1)"  ${i===timeBlocks.length-1?'disabled':''}>▼</button>
+      <button class="btn btn-sm btn-edit"   onclick="editTbInline('${tb.id}')">編集</button>
+      <button class="btn btn-sm btn-delete" onclick="deleteTb('${tb.id}')">削除</button>
+    </div>`).join('');
+}
+
+function editTbInline(tbId) {
+  const tb   = timeBlocks.find(t => t.id === tbId);
+  const item = id('tba-' + tbId);
+  if (!tb || !item) return;
+  item.innerHTML = `
+    <div class="tb-admin-inline">
+      <input id="tbi-${tbId}" value="${esc(tb.label)}" maxlength="20"
+        onkeydown="if(event.key==='Enter')saveTbEdit('${tbId}')">
+    </div>
+    <button class="btn btn-sm btn-edit"  onclick="saveTbEdit('${tbId}')">保存</button>
+    <button class="btn btn-sm btn-ghost" onclick="renderTbAdmin()">戻る</button>`;
+  id('tbi-' + tbId)?.focus();
+}
+
+async function saveTbEdit(tbId) {
+  const label = id('tbi-' + tbId)?.value.trim();
+  if (!label) { toast('ラベルを入力してください', 'err'); return; }
+  const { error } = await sb.from('time_blocks').update({ label }).eq('id', tbId);
+  if (error) { toast('更新失敗', 'err'); return; }
+  toast('更新しました');
+}
+
+async function deleteTb(tbId) {
+  const tb = timeBlocks.find(t => t.id === tbId);
+  if (!confirm(`「${tb?.label}」を削除しますか？`)) return;
+  const { error } = await sb.from('time_blocks').delete().eq('id', tbId);
+  if (error) { toast('削除失敗', 'err'); return; }
+  toast('削除しました');
+}
+
+async function moveTb(tbId, dir) {
+  const idx  = timeBlocks.findIndex(t => t.id === tbId);
+  const swap = timeBlocks[idx + dir];
+  if (!swap) return;
+  const aOrder = timeBlocks[idx].sort_order;
+  const bOrder = swap.sort_order;
+  const updates = [
+    sb.from('time_blocks').update({ sort_order: bOrder }).eq('id', tbId),
+    sb.from('time_blocks').update({ sort_order: aOrder }).eq('id', swap.id),
+  ];
+  const res = await Promise.all(updates);
+  if (res.some(r => r.error)) { toast('並び替え失敗', 'err'); }
+}
+
+async function addTimeBlock() {
+  const label = id('tbNewLabel')?.value.trim();
+  if (!label) { toast('時間帯ラベルを入力してください', 'err'); return; }
+  const maxOrder = timeBlocks.reduce((m, t) => Math.max(m, t.sort_order), -1);
+  const btn = id('tbAddBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '追加中…'; }
+  const { error } = await sb.from('time_blocks').insert({ label, sort_order: maxOrder + 1 });
+  if (btn) { btn.disabled = false; btn.textContent = '＋ 追加'; }
+  if (error) { toast('追加失敗: ' + error.message, 'err'); return; }
+  if (id('tbNewLabel')) id('tbNewLabel').value = '';
+  toast('時間帯を追加しました');
 }
 
 /* ─── admin: render list ────────────────── */
@@ -917,6 +1156,19 @@ function renderAdminList() {
 function openEdit(i) {
   const p = participants[i];
   const item = id('ai-' + i);
+  const selectedTbIds = participantTimeBlocks
+    .filter(r => r.participant_id === p.id)
+    .map(r => r.time_block_id);
+  const tbHtml = timeBlocks.length ? `
+    <div class="field-label" style="font-size:11px;margin:8px 0 5px">参加できる時間帯</div>
+    <div class="tb-check-group" style="margin-bottom:8px">
+      ${timeBlocks.map(tb => `
+        <div class="tb-check-item">
+          <input type="checkbox" id="ei-tb-${i}-${tb.id}" value="${tb.id}"
+            ${selectedTbIds.includes(tb.id)?'checked':''}>
+          <label for="ei-tb-${i}-${tb.id}">${esc(tb.label)}</label>
+        </div>`).join('')}
+    </div>` : '';
   item.innerHTML = `
     <div class="inline-edit-wrap">
       <input class="inline-text-input" id="ei-name-${i}"
@@ -931,6 +1183,7 @@ function openEdit(i) {
       </div>
       <input class="inline-text-input" id="ei-cmt-${i}"
         value="${esc(p.comment??'')}" maxlength="40" placeholder="コメント（任意）">
+      ${tbHtml}
       <div class="inline-actions">
         <button class="btn btn-sm btn-edit"  onclick="saveEdit('${p.id}',${i})">保存</button>
         <button class="btn btn-sm btn-ghost" onclick="renderAdminList()">戻る</button>
@@ -949,6 +1202,17 @@ async function saveEdit(pid, i) {
   const { error } = await sb.from('participants')
     .update({ name, status, comment }).eq('id', pid);
   if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
+
+  /* 時間帯の更新: 既存を全削除してから再挿入 */
+  const newTbIds = [...document.querySelectorAll(`[id^="ei-tb-${i}-"]:checked`)]
+    .map(el => el.value);
+  await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
+  if (newTbIds.length) {
+    await sb.from('participant_time_blocks').insert(
+      newTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+    );
+  }
+
   toast('更新しました');
 }
 
