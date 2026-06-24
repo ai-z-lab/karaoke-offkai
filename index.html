@@ -1239,7 +1239,7 @@ async function register() {
   const comment    = id('regComment').value.trim();
 
   if (!name)  { toast('名前を入力してください', 'err'); return; }
-  if (participants.some(p => p.name === name)) {
+  if (participants.some(p => normalize(p.name) === normalize(name))) {
     toast('その名前はすでに登録されています', 'err'); return;
   }
 
@@ -1532,7 +1532,7 @@ async function importAdjustCSV(input) {
     const threads_id = spaceMatch ? spaceMatch[2].trim() : '';
 
     /* 重複チェック */
-    if (participants.some(p => p.name === name)) {
+    if (participants.some(p => normalize(p.name) === normalize(name))) {
       importResults.push({ name, status: 'skip', reason: '既に登録済み（スキップ）' });
       continue;
     }
@@ -1677,7 +1677,7 @@ async function saveEdit(pid, i) {
   const threads_id = id(`ei-tid-${i}`).value.trim();
   const comment    = id(`ei-cmt-${i}`).value.trim();
   if (!name) { toast('名前は必須です', 'err'); return; }
-  if (participants.some((p, idx) => p.name === name && p.id !== pid)) {
+  if (participants.some((p, idx) => normalize(p.name) === normalize(name) && p.id !== pid)) {
     toast('その名前はすでに存在します', 'err'); return;
   }
   const { error } = await sb.from('participants')
@@ -1723,14 +1723,16 @@ async function selfLookup() {
 
   const btn = id('selfLookupBtn');
   btn.disabled = true; btn.textContent = '検索中…';
-  const { data, error } = await sb
-    .from('participants').select('*').eq('name', name).maybeSingle();
+  const found = participants.find(p => normalize(p.name) === normalize(name));
   btn.disabled = false; btn.textContent = '呼び出す';
 
-  if (error) { toast('検索失敗: ' + error.message, 'err'); return; }
-  if (!data)  { toast('その名前は登録されていません', 'err'); return; }
+  if (!found) { toast('その名前は登録されていません', 'err'); return; }
 
-  renderSelfEditForm(data);
+  /* 最新データをDBから取得 */
+  const { data, error } = await sb
+    .from('participants').select('*').eq('id', found.id).maybeSingle();
+  if (error) { toast('取得失敗: ' + error.message, 'err'); return; }
+  renderSelfEditForm(data ?? found);
 }
 
 function renderSelfEditForm(p) {
@@ -1899,6 +1901,19 @@ function switchTab(el) {
 function id(s) { return document.getElementById(s); }
 function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+/* 全角英数字・記号・カナを半角に正規化してから小文字化 */
+function normalize(str) {
+  return String(str ?? '')
+    .replace(/[Ａ-Ｚａ-ｚ０-９！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[ァ-ン]/g, c => {
+      const h = 'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ';
+      const f = 'ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン゛゜';
+      const i = f.indexOf(c);
+      return i >= 0 ? h[i] : c;
+    })
+    .toLowerCase();
+}
 
 function esc(s) {
   return String(s ?? '')
