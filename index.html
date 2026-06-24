@@ -1494,8 +1494,8 @@ async function importAdjustCSV(input) {
   const file = input.files?.[0];
   if (!file) return;
 
-  /* ファイル読み込み（BOM除去） */
-  const raw = await file.text();
+  /* ファイル読み込み（BOM除去・改行統一） */
+  const raw  = await file.text();
   const text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   const allRows = parseCSV(text);
@@ -1508,48 +1508,61 @@ async function importAdjustCSV(input) {
   }
   if (headerIdx < 0) { toast('ヘッダー行（「日程」列）が見つかりません', 'err'); return; }
 
-  const headerRow   = allRows[headerIdx];
-  const dataRows    = allRows.slice(headerIdx + 1);
+  const headerRow = allRows[headerIdx];
+  const dataRows  = allRows.slice(headerIdx + 1);
 
-  /* コメント行（最終行）と時間帯行を分離 */
-  const commentRow  = dataRows[dataRows.length - 1];
-  const tbRows      = dataRows.slice(0, dataRows.length - 1);
-
-  /* 時間帯ブロックとCSV時間帯行を順番で対応づけ */
-  const sortedBlocks = [...timeBlocks].sort((a, b) => a.sort_order - b.sort_order);
+  /* コメント行を末尾から探す */
+  let commentRowIdx = -1;
+  for (let i = dataRows.length - 1; i >= 0; i--) {
+    if (dataRows[i][0]?.trim() === 'コメント') { commentRowIdx = i; break; }
+  }
+  const commentRow  = commentRowIdx >= 0 ? dataRows[commentRowIdx] : null;
+  const statusRows  = dataRows.filter((_, i) => i !== commentRowIdx);
 
   /* 参加者列（2列目以降）を解析 */
   const importResults = [];
   const insertJobs    = [];
 
   for (let col = 1; col < headerRow.length; col++) {
-    const raw = (headerRow[col] ?? '').trim();
-    if (!raw) continue;
+    const cell = (headerRow[col] ?? '').trim();
+    if (!cell) continue;
 
-    /* 「名前 ThreadsID」を空白（全角/半角）で分割 */
-    const spaceMatch = raw.match(/^(.+?)[\s　]+(@\S+)$/);
-    const name       = spaceMatch ? spaceMatch[1].trim() : raw;
-    const threads_id = spaceMatch ? spaceMatch[2].trim() : '';
+    /* ヘッダーセルを「ThreadsID 名前」または「名前のみ」で分割
+       スペース（全角/半角）で分割し、先頭がThreadsID・残りが名前 */
+    const parts      = cell.split(/[\s　]+/);
+    const threads_id = parts.length >= 2 ? parts[0] : '';
+    const name       = parts.length >= 2 ? parts.slice(1).join(' ') : parts[0];
+    if (!name) continue;
 
-    /* 重複チェック */
+    /* 重複チェック（全角半角無視） */
     if (participants.some(p => normalize(p.name) === normalize(name))) {
       importResults.push({ name, status: 'skip', reason: '既に登録済み（スキップ）' });
       continue;
     }
 
-    /* ◯の有無でステータス判定 */
-    const hasAttend  = tbRows.some(r => (r[col] ?? '').trim() === '◯');
-    const status     = hasAttend ? 'going' : 'tbd';
+    /* ステータス判定 */
+    const status = (() => {
+      for (const row of statusRows) {
+        const label = row[0]?.trim() ?? '';
+        const val   = (row[col] ?? '').trim();
+        if (label === '参加') {
+          if (val === '◯') return 'going';
+          if (val === '△') return 'maybe';
+        }
+        if (label === '不参加' && val === '◯') return 'absent';
+      }
+      /* 途中参加・途中退場など他行に◯か△があれば時間未定 */
+      const hasPartial = statusRows.some(row => {
+        const val = (row[col] ?? '').trim();
+        return val === '◯' || val === '△';
+      });
+      return hasPartial ? 'tbd' : 'absent';
+    })();
 
     /* コメント */
-    const comment    = (commentRow?.[col] ?? '').trim();
+    const comment = (commentRow?.[col] ?? '').trim();
 
-    /* 時間帯ブロックの選択（CSV順↔sortedBlocks順で対応） */
-    const selectedTbIds = sortedBlocks
-      .filter((_, tbIdx) => (tbRows[tbIdx]?.[col] ?? '').trim() === '◯')
-      .map(tb => tb.id);
-
-    insertJobs.push({ name, status, threads_id, comment, selectedTbIds });
+    insertJobs.push({ name, status, threads_id, comment });
   }
 
   if (!insertJobs.length && !importResults.length) {
@@ -1558,27 +1571,21 @@ async function importAdjustCSV(input) {
 
   /* DB登録 */
   toast('インポート中…', 'info');
+  const STATUS_LABEL_JP = { going: '参加するで登録', maybe: '検討中で登録',
+                             tbd: '時間未定で登録', absent: '欠席で登録' };
   for (const job of insertJobs) {
-    const { data: inserted, error } = await sb
+    const { error } = await sb
       .from('participants')
       .insert({ name: job.name, status: job.status,
                 threads_id: job.threads_id, comment: job.comment,
-                residence: '' })
-      .select('id');
+                residence: '' });
 
     if (error) {
       importResults.push({ name: job.name, status: 'err', reason: error.message });
       continue;
     }
-
-    const pid = inserted?.[0]?.id;
-    if (pid && job.selectedTbIds.length) {
-      await sb.from('participant_time_blocks').insert(
-        job.selectedTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
-      );
-    }
     importResults.push({ name: job.name, status: 'ok',
-      reason: job.status === 'going' ? '出席で登録' : '時間未定で登録' });
+      reason: STATUS_LABEL_JP[job.status] ?? job.status });
   }
 
   await fetchParticipants();
@@ -1589,11 +1596,10 @@ async function importAdjustCSV(input) {
   const errCount  = importResults.filter(r => r.status === 'err').length;
 
   const summaryHtml = `<div style="margin-bottom:10px;font-weight:700">
-    ✅ 登録: ${okCount}人　⏭️ スキップ: ${skipCount}人　❌ エラー: ${errCount}人
-  </div>`;
+    ✅ 登録: ${okCount}人　⏭️ スキップ: ${skipCount}人　❌ エラー: ${errCount}人</div>`;
   const listHtml = importResults.map(r => {
-    const cls = r.status === 'ok' ? 'import-result-ok'
-              : r.status === 'skip' ? 'import-result-skip' : 'import-result-err';
+    const cls  = r.status === 'ok' ? 'import-result-ok'
+               : r.status === 'skip' ? 'import-result-skip' : 'import-result-err';
     const icon = r.status === 'ok' ? '✅' : r.status === 'skip' ? '⏭️' : '❌';
     return `<div class="import-result-item ${cls}">${icon} ${esc(r.name)} — ${esc(r.reason)}</div>`;
   }).join('');
