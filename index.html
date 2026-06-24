@@ -522,10 +522,10 @@ create table if not exists participants (
 -- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
 alter table participants add column if not exists threads_id text not null default '';
 alter table participants add column if not exists residence  text not null default '';
--- 既存DBの check 制約を更新して 'absent' を許可する（既存環境向け）
--- alter table participants drop constraint if exists participants_status_check;
--- alter table participants add constraint participants_status_check
---   check (status in ('going','maybe','tbd','absent'));
+-- ▼ 既存DBの check 制約を更新して 'absent' を許可する（既存環境向け・必須）
+alter table participants drop constraint if exists participants_status_check;
+alter table participants add constraint participants_status_check
+  check (status in ('going','maybe','tbd','absent'));
 
 -- テーブル: 設定
 create table if not exists settings (
