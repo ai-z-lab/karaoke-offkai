@@ -7,7 +7,7 @@ create table if not exists participants (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   status      text not null
-              check (status in ('going','maybe','tbd')),
+              check (status in ('going','maybe','tbd','absent')),
   comment     text not null default '',
   created_at  timestamptz not null default now()
 );
