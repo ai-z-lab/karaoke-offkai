@@ -23,6 +23,7 @@
   --going:     #2e9e5b;
   --maybe:     #d97706;
   --tbd:       #7a8fa6;
+  --absent:    #9ca3af;
   --text:      #2c1a0e;
   --muted:     #8a6a50;
   --danger:    #dc2626;
@@ -128,7 +129,7 @@ main { padding: 16px; }
 
 /* ═══ STATS ═════════════════════════════ */
 .stats-grid {
-  display: grid; grid-template-columns: repeat(3,1fr);
+  display: grid; grid-template-columns: repeat(2,1fr);
   gap: 8px; margin-bottom: 18px;
 }
 .stat-card {
@@ -140,6 +141,7 @@ main { padding: 16px; }
 .stat-num.going   { color: var(--going); }
 .stat-num.maybe   { color: var(--maybe); }
 .stat-num.tbd     { color: var(--tbd); }
+.stat-num.absent  { color: var(--absent); }
 .stat-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
 
 /* ═══ PARTICIPANT LIST ══════════════════ */
@@ -152,10 +154,12 @@ main { padding: 16px; }
 .g-dot.going   { background: var(--going); }
 .g-dot.maybe   { background: var(--maybe); }
 .g-dot.tbd     { background: var(--tbd); }
+.g-dot.absent  { background: var(--absent); }
 .g-name { font-size: 13px; font-weight: 700; }
 .g-name.going  { color: var(--going); }
 .g-name.maybe  { color: var(--maybe); }
 .g-name.tbd    { color: var(--tbd); }
+.g-name.absent { color: var(--absent); }
 .g-count { font-size: 11px; color: var(--muted); }
 
 .p-item {
@@ -224,6 +228,8 @@ main { padding: 16px; }
   border-color: var(--maybe); color: var(--maybe); background: rgba(217,119,6,.1); }
 .pill-group input[value=tbd]:checked     + .pill-label {
   border-color: var(--tbd);   color: var(--tbd);   background: rgba(122,143,166,.1); }
+.pill-group input[value=absent]:checked  + .pill-label {
+  border-color: var(--absent); color: var(--absent); background: rgba(156,163,175,.1); }
 
 /* ═══ BUTTONS ════════════════════════════ */
 .btn {
@@ -507,7 +513,7 @@ create table if not exists participants (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   status      text not null
-              check (status in ('going','maybe','tbd')),
+              check (status in ('going','maybe','tbd','absent')),
   comment     text not null default '',
   threads_id  text not null default '',
   residence   text not null default '',
@@ -516,6 +522,10 @@ create table if not exists participants (
 -- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
 alter table participants add column if not exists threads_id text not null default '';
 alter table participants add column if not exists residence  text not null default '';
+-- 既存DBの check 制約を更新して 'absent' を許可する（既存環境向け）
+-- alter table participants drop constraint if exists participants_status_check;
+-- alter table participants add constraint participants_status_check
+--   check (status in ('going','maybe','tbd','absent'));
 
 -- テーブル: 設定
 create table if not exists settings (
@@ -701,6 +711,10 @@ alter publication supabase_realtime
           <div class="stat-num tbd" id="cnt-tbd">—</div>
           <div class="stat-label">⏰ 時間未定</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-num absent" id="cnt-absent">—</div>
+          <div class="stat-label">🚫 欠席</div>
+        </div>
       </div>
 
       <div id="listContainer">
@@ -727,12 +741,14 @@ alter publication supabase_realtime
             ステータス <span class="field-required">*</span>
           </label>
           <div class="pill-group">
-            <input type="radio" name="regStatus" id="rs-going" value="going">
+            <input type="radio" name="regStatus" id="rs-going" value="going" onchange="updateRegTbVisibility()">
             <label class="pill-label" for="rs-going">✅ 参加する</label>
-            <input type="radio" name="regStatus" id="rs-maybe" value="maybe" checked>
+            <input type="radio" name="regStatus" id="rs-maybe" value="maybe" checked onchange="updateRegTbVisibility()">
             <label class="pill-label" for="rs-maybe">🤔 検討中</label>
-            <input type="radio" name="regStatus" id="rs-tbd"   value="tbd">
+            <input type="radio" name="regStatus" id="rs-tbd"   value="tbd" onchange="updateRegTbVisibility()">
             <label class="pill-label" for="rs-tbd">⏰ 時間未定</label>
+            <input type="radio" name="regStatus" id="rs-absent" value="absent" onchange="updateRegTbVisibility()">
+            <label class="pill-label" for="rs-absent">🚫 欠席</label>
           </div>
         </div>
 
@@ -1135,9 +1151,10 @@ function subscribeRealtime() {
 
 /* ─── render list ───────────────────────── */
 const GROUP_META = [
-  { key: 'going', emoji: '✅', label: '参加する', cls: 'going' },
-  { key: 'maybe', emoji: '🤔', label: '検討中',   cls: 'maybe' },
-  { key: 'tbd',   emoji: '⏰', label: '時間未定', cls: 'tbd'   },
+  { key: 'going',  emoji: '✅', label: '参加する', cls: 'going'  },
+  { key: 'maybe',  emoji: '🤔', label: '検討中',   cls: 'maybe'  },
+  { key: 'tbd',    emoji: '⏰', label: '時間未定', cls: 'tbd'    },
+  { key: 'absent', emoji: '🚫', label: '欠席',     cls: 'absent' },
 ];
 
 function renderList() {
@@ -1194,12 +1211,23 @@ function renderRegTbCheckboxes() {
   const group = id('regTbGroup');
   if (!wrap || !group) return;
   if (!timeBlocks.length) { wrap.classList.add('hidden'); return; }
-  wrap.classList.remove('hidden');
   group.innerHTML = timeBlocks.map(tb => `
     <div class="tb-check-item">
       <input type="checkbox" id="rtb-${tb.id}" value="${tb.id}">
       <label for="rtb-${tb.id}">${esc(tb.label)}</label>
     </div>`).join('');
+  updateRegTbVisibility();
+}
+
+function updateRegTbVisibility() {
+  const wrap   = id('regTbWrap');
+  if (!wrap) return;
+  const status = document.querySelector('input[name=regStatus]:checked')?.value;
+  if (!timeBlocks.length || status === 'absent') {
+    wrap.classList.add('hidden');
+  } else {
+    wrap.classList.remove('hidden');
+  }
 }
 
 /* ─── register ──────────────────────────── */
@@ -1371,7 +1399,7 @@ function csvCell(v) {
 function downloadCSV() {
   if (!participants.length) { toast('参加者がいません', 'err'); return; }
 
-  const STATUS_LABEL = { going: '出席', maybe: '検討中', tbd: '時間未定' };
+  const STATUS_LABEL = { going: '出席', maybe: '検討中', tbd: '時間未定', absent: '欠席' };
 
   const rows = [];
 
@@ -1582,7 +1610,7 @@ function renderAdminList() {
   }
   let html = '';
   participants.forEach((p, i) => {
-    const em = { going:'✅', maybe:'🤔', tbd:'⏰' }[p.status] ?? '';
+    const em = { going:'✅', maybe:'🤔', tbd:'⏰', absent:'🚫' }[p.status] ?? '';
     html += `
       <div class="p-item" id="ai-${i}">
         <div class="p-body">
@@ -1621,7 +1649,7 @@ function openEdit(i) {
       <input class="inline-text-input" id="ei-name-${i}"
         value="${esc(p.name)}" maxlength="20" placeholder="名前">
       <div class="inline-pill-group">
-        ${[['going','✅ 参加する'],['maybe','🤔 検討中'],['tbd','⏰ 時間未定']].map(([v,l]) => `
+        ${[['going','✅ 参加する'],['maybe','🤔 検討中'],['tbd','⏰ 時間未定'],['absent','🚫 欠席']].map(([v,l]) => `
           <label>
             <input type="radio" name="ei-st-${i}" value="${v}"
               ${p.status===v?'checked':''}>
@@ -1735,6 +1763,8 @@ function renderSelfEditForm(p) {
         <label class="pill-label" for="se-maybe">🤔 検討中</label>
         <input type="radio" name="se-status" id="se-tbd"   value="tbd"   ${p.status==='tbd'?'checked':''}>
         <label class="pill-label" for="se-tbd">⏰ 時間未定</label>
+        <input type="radio" name="se-status" id="se-absent" value="absent" ${p.status==='absent'?'checked':''}>
+        <label class="pill-label" for="se-absent">🚫 欠席</label>
       </div>
     </div>
     ${tbHtml}
