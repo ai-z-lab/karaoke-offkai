@@ -449,6 +449,8 @@ main { padding: 16px; }
   border-bottom: 1px solid var(--border);
 }
 .self-actions { display: flex; gap: 8px; margin-top: 4px; }
+.btn-danger  { background: rgba(220,38,38,.08); color: var(--danger); border: 1px solid rgba(220,38,38,.3); }
+.btn-danger:hover { background: rgba(220,38,38,.15); }
 .btn-danger-full {
   flex: 1; padding: 11px;
   background: rgba(220,38,38,.08); border: 1.5px solid rgba(220,38,38,.3);
@@ -946,6 +948,10 @@ alter publication supabase_realtime
             style="width:auto;padding:9px 20px;font-size:13px">
             ログアウト
           </button>
+          <button class="btn btn-danger" onclick="deleteAllParticipants()"
+            style="width:auto;padding:9px 20px;font-size:13px">
+            参加者を全員削除
+          </button>
         </div>
       </div>
     </div><!-- /pane-admin -->
@@ -1340,6 +1346,13 @@ function adminLogout() {
   id('adminPanel').classList.add('hidden');
   id('adminPwInput').value = '';
   toast('ログアウトしました');
+}
+
+async function deleteAllParticipants() {
+  if (!confirm('本当に全員削除しますか？\nこの操作は元に戻せません。')) return;
+  const { error } = await sb.from('participants').delete().neq('id', 0);
+  if (error) { toast('削除に失敗しました: ' + error.message, 'err'); return; }
+  toast('参加者を全員削除しました');
 }
 
 /* ─── admin: time block management ─────── */
