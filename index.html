@@ -206,6 +206,7 @@ main { padding: 16px; }
 .pw-input:focus,
 .textarea-input:focus { border-color: var(--accent); }
 .textarea-input { resize: vertical; min-height: 76px; font-size: 14px; line-height: 1.5; }
+.textarea-input.auto-expand { resize: none; overflow: hidden; min-height: calc(1.5em * 5 + 22px); }
 .datetime-picker-wrap { display: flex; flex-direction: column; gap: 8px; }
 .time-range-wrap { display: flex; align-items: center; gap: 6px; }
 .time-range-wrap .time-input { flex: 1; }
@@ -824,8 +825,9 @@ alter publication supabase_realtime
         <div class="form-card">
           <div class="form-heading">📢 お知らせ</div>
           <div class="field-wrap">
-            <textarea class="textarea-input" id="adminNotice"
-              placeholder="告知・変更情報など（空にするとバナー非表示）"></textarea>
+            <textarea class="textarea-input auto-expand" id="adminNotice" rows="5"
+              placeholder="告知・変更情報など（空にするとバナー非表示）"
+              oninput="autoExpand(this)"></textarea>
           </div>
           <button class="btn btn-primary" id="noticeSaveBtn" onclick="saveNotice()">
             保存する
@@ -1128,6 +1130,8 @@ function applySettings() {
   setVal('adminPlaceUrl',  placeUrl);
   setVal('adminNotes',     notes);
   setVal('adminNotice',    notice);
+  const noticeEl = id('adminNotice');
+  if (noticeEl) autoExpand(noticeEl);
 }
 
 /* ─── realtime ──────────────────────────── */
@@ -1911,6 +1915,10 @@ function switchTab(el) {
 function id(s) { return document.getElementById(s); }
 function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function autoExpand(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 
 /* 全角英数字・記号・カナを半角に正規化してから小文字化 */
 function normalize(str) {
