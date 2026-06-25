@@ -449,8 +449,12 @@ main { padding: 16px; }
   border-bottom: 1px solid var(--border);
 }
 .self-actions { display: flex; gap: 8px; margin-top: 4px; }
-.btn-danger  { background: rgba(220,38,38,.08); color: var(--danger); border: 1px solid rgba(220,38,38,.3); }
+.btn-danger       { background: rgba(220,38,38,.08); color: var(--danger); border: 1px solid rgba(220,38,38,.3); }
 .btn-danger:hover { background: rgba(220,38,38,.15); }
+.btn-danger-solid { background: #dc2626; color: #fff; border: none; border-radius: var(--r);
+                    padding: 12px 28px; font-size: 14px; font-weight: 700; cursor: pointer;
+                    letter-spacing: .03em; }
+.btn-danger-solid:hover { background: #b91c1c; }
 .btn-danger-full {
   flex: 1; padding: 11px;
   background: rgba(220,38,38,.08); border: 1.5px solid rgba(220,38,38,.3);
@@ -948,9 +952,10 @@ alter publication supabase_realtime
             style="width:auto;padding:9px 20px;font-size:13px">
             ログアウト
           </button>
-          <button class="btn btn-danger" onclick="deleteAllParticipants()"
-            style="width:auto;padding:9px 20px;font-size:13px">
-            参加者を全員削除
+        </div>
+        <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
+          <button class="btn btn-danger-solid" onclick="deleteAllParticipants()">
+            🗑️ 参加者を全員削除
           </button>
         </div>
       </div>
@@ -1349,7 +1354,7 @@ function adminLogout() {
 }
 
 async function deleteAllParticipants() {
-  if (!confirm('本当に全員削除しますか？\nこの操作は元に戻せません。')) return;
+  if (!confirm('本当に全員削除しますか？\nこの操作は取り消せません。')) return;
   const { error } = await sb.from('participants').delete().neq('id', 0);
   if (error) { toast('削除に失敗しました: ' + error.message, 'err'); return; }
   toast('参加者を全員削除しました');
