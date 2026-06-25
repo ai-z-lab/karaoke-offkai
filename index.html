@@ -1527,11 +1527,15 @@ async function importAdjustCSV(input) {
     const cell = (headerRow[col] ?? '').trim();
     if (!cell) continue;
 
-    /* ヘッダーセルを「ThreadsID 名前」または「名前のみ」で分割
-       スペース（全角/半角）で分割し、先頭がThreadsID・残りが名前 */
-    const parts      = cell.split(/[\s　]+/);
-    const threads_id = parts.length >= 2 ? parts[0] : '';
-    const name       = parts.length >= 2 ? parts.slice(1).join(' ') : parts[0];
+    /* ヘッダーセルを「名前 ThreadsID」または「名前のみ」で分割
+       先頭の単語が日本語（ひらがな・カタカナ・漢字）を含む場合は名前と判定し、
+       アルファベット・数字のみでも先頭を名前として扱う。
+       例: "ひとみん hitomin_5656" → 名前:ひとみん, ID:hitomin_5656
+           "Nao naonii"           → 名前:Nao,     ID:naonii
+           "hitomin_5656"         → 名前:hitomin_5656, ID:空欄 */
+    const parts    = cell.split(/[\s　]+/);
+    const name       = parts[0];
+    const threads_id = parts.length >= 2 ? parts.slice(1).join(' ') : '';
     if (!name) continue;
 
     /* 重複チェック（全角半角無視） */
