@@ -27,6 +27,8 @@ insert into settings (key, value) values
   ('event_end_time',   ''),   -- 終了時刻 例: 21:00
   ('event_place',      ''),
   ('event_place_url',  ''),   -- 場所のURL（GoogleマップなどのリンクURL）
+  ('organizer_name',        ''),   -- 幹事名
+  ('organizer_threads_id',  ''),   -- 幹事のThreads ID（例: @anego_threads）
   ('event_notes',      ''),
   ('notice',           ''),
   ('admin_pw',         '')    -- アプリのセットアップ画面から自動設定される（平文）
@@ -78,5 +80,7 @@ alter publication supabase_realtime
 --   ('event_date',       ''),
 --   ('event_start_time', ''),
 --   ('event_end_time',   ''),
---   ('event_place_url',  '')
+--   ('event_place_url',  ''),
+--   ('organizer_name',        ''),
+--   ('organizer_threads_id',  '')
 -- on conflict (key) do nothing;
