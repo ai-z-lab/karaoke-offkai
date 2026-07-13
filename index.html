@@ -333,10 +333,10 @@ const FALLBACK_EVENTS = [
 ];
 
 /* ─── 管理者セッション（各回のページと共有） ──
-   同じブラウザで一度ログインすれば、7日間は他のページに移動しても
+   同じブラウザで一度ログインすれば、12時間は他のページに移動しても
    パスワード再入力が不要になる。ログアウトすると全ページで解除される。 */
 const ADMIN_SESSION_KEY    = 'ok_admin_session';
-const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 function isAdminSessionValid() {
   const raw = ls(ADMIN_SESSION_KEY);
