@@ -158,6 +158,7 @@ body {
 .ev-date-input { flex: 0 0 150px; }
 .ev-url-input { flex: 1; min-width: 0; }
 .ev-admin-actions { display: flex; gap: 8px; }
+.ev-url-preview { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
 
 .hidden { display: none !important; }
 
@@ -276,13 +277,13 @@ on conflict (event_no) do nothing;</pre>
     <div class="form-card">
       <div class="form-heading">＋ イベントを追加</div>
       <div class="ev-admin-row">
-        <input class="text-input ev-no-input" id="newEvNo" type="number" placeholder="回" min="1">
+        <input class="text-input ev-no-input" id="newEvNo" type="number" placeholder="回" min="1" oninput="updateNewEvUrlPreview()">
         <input class="text-input ev-title-input" id="newEvTitle" type="text" placeholder="イベント名（例：第二回 カラオケオフ会）" maxlength="60">
       </div>
       <div class="ev-admin-row">
-        <input class="text-input ev-date-input" id="newEvDate" type="date">
-        <input class="text-input ev-url-input" id="newEvUrl" type="text" placeholder="URL（例：event/2/index.html）" maxlength="300">
+        <input class="text-input" id="newEvDate" type="date" style="flex:1">
       </div>
+      <div class="ev-url-preview" id="newEvUrlPreview">🔗 URL: event/回数/index.html（回数から自動生成されます）</div>
       <button class="btn btn-primary" id="newEvAddBtn" onclick="addEvent()">追加する</button>
     </div>
 
@@ -430,15 +431,24 @@ function adminLogout() {
 }
 
 /* ─── event CRUD ────────────────────────── */
+function eventUrlFor(eventNo) { return `event/${eventNo}/index.html`; }
+
+function updateNewEvUrlPreview() {
+  const event_no = parseInt(id('newEvNo').value, 10);
+  id('newEvUrlPreview').textContent = event_no
+    ? `🔗 URL: ${eventUrlFor(event_no)}（自動生成）`
+    : '🔗 URL: event/回数/index.html（回数から自動生成されます）';
+}
+
 async function addEvent() {
   const event_no   = parseInt(id('newEvNo').value, 10);
   const title       = id('newEvTitle').value.trim();
   const event_date  = id('newEvDate').value || null;
-  const url         = id('newEvUrl').value.trim();
 
   if (!event_no)  { toast('回数を入力してください', 'err'); return; }
   if (!title)     { toast('イベント名を入力してください', 'err'); return; }
-  if (!url)       { toast('URLを入力してください', 'err'); return; }
+
+  const url = eventUrlFor(event_no);
 
   setLoading('newEvAddBtn', true, '追加中…');
   const { error } = await sb.from('events').insert({ event_no, title, event_date, url });
@@ -450,7 +460,7 @@ async function addEvent() {
   id('newEvNo').value = '';
   id('newEvTitle').value = '';
   id('newEvDate').value = '';
-  id('newEvUrl').value = '';
+  updateNewEvUrlPreview();
   toast('イベントを追加しました');
   fetchEvents();
 }
