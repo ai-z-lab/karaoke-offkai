@@ -161,10 +161,26 @@ input.text-input[type="date"] {
 .ev-admin-row .text-input { margin: 0; }
 .ev-no-input  { flex: 0 0 64px; }
 .ev-title-input { flex: 1; min-width: 0; }
-.ev-date-input { flex: 0 0 150px; }
+.ev-date-input { flex: 0 0 170px; }
 .ev-url-input { flex: 1; min-width: 0; }
 .ev-admin-actions { display: flex; gap: 8px; }
 .ev-url-preview { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+
+/* ═══ DATE FIELD（カレンダーUI + カスタムプレースホルダー） ═══ */
+.date-field-wrap { position: relative; }
+.date-field-native {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; margin: 0; padding: 0; border: none; cursor: pointer;
+}
+.date-field-display {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  color: var(--muted); font-size: 14px; font-family: inherit;
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: border-color .2s;
+}
+.date-field-display.has-value { color: var(--text); }
+.date-field-native:focus + .date-field-display { border-color: var(--accent); }
 
 .hidden { display: none !important; }
 
@@ -287,7 +303,10 @@ on conflict (event_no) do nothing;</pre>
         <input class="text-input ev-title-input" id="newEvTitle" type="text" placeholder="イベント名（例：第二回 カラオケオフ会）" maxlength="60">
       </div>
       <div class="ev-admin-row">
-        <input class="text-input" id="newEvDate" type="date" style="flex:1">
+        <div class="date-field-wrap" style="flex:1">
+          <input class="date-field-native" id="newEvDate" type="date" onchange="updateDateDisplay('newEvDate')">
+          <div class="date-field-display" id="newEvDateDisplay">📅 日付を選択</div>
+        </div>
       </div>
       <div class="ev-url-preview" id="newEvUrlPreview">🔗 URL: event/回数/index.html（回数から自動生成されます）</div>
       <button class="btn btn-primary" id="newEvAddBtn" onclick="addEvent()">追加する</button>
@@ -366,6 +385,22 @@ function formatDateShort(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/* ─── date field（カレンダーUI + カスタムプレースホルダー） ── */
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '📅 日付を選択';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['日','月','火','水','木','金','土'];
+  return `📅 ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${days[d.getDay()]}）`;
+}
+
+function updateDateDisplay(inputId) {
+  const input   = id(inputId);
+  const display = id(inputId + 'Display');
+  if (!input || !display) return;
+  display.textContent = formatDateDisplay(input.value);
+  display.classList.toggle('has-value', !!input.value);
+}
+
 function renderEventList() {
   const c = id('eventList');
   if (!events.length) {
@@ -397,7 +432,10 @@ function renderEventAdmin() {
         <input class="text-input ev-title-input" type="text" maxlength="60" value="${esc(ev.title)}" id="ev-title-${ev.id}">
       </div>
       <div class="ev-admin-row">
-        <input class="text-input ev-date-input" type="date" value="${esc(ev.event_date ?? '')}" id="ev-date-${ev.id}">
+        <div class="date-field-wrap ev-date-input">
+          <input class="date-field-native" type="date" value="${esc(ev.event_date ?? '')}" id="ev-date-${ev.id}" onchange="updateDateDisplay('ev-date-${ev.id}')">
+          <div class="date-field-display${ev.event_date ? ' has-value' : ''}" id="ev-date-${ev.id}Display">${esc(formatDateDisplay(ev.event_date))}</div>
+        </div>
         <input class="text-input ev-url-input" type="text" maxlength="300" value="${esc(ev.url)}" id="ev-url-${ev.id}">
       </div>
       <div class="ev-admin-actions">
@@ -468,6 +506,7 @@ async function addEvent() {
   id('newEvNo').value = '';
   id('newEvTitle').value = '';
   id('newEvDate').value = '';
+  updateDateDisplay('newEvDate');
   updateNewEvUrlPreview();
   toast('イベントを追加しました');
   fetchEvents();
