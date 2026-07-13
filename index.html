@@ -347,7 +347,9 @@ async function fetchEvents() {
 }
 
 async function fetchAdminPw() {
-  const { data, error } = await sb.from('settings').select('value').eq('key', 'admin_pw').maybeSingle();
+  /* admin_pw は全イベント共通の特別行（event_id=0）に保存されている */
+  const { data, error } = await sb.from('settings').select('value')
+    .eq('key', 'admin_pw').eq('event_id', 0).maybeSingle();
   if (error) { adminPw = ''; return; }
   adminPw = data?.value ?? '';
 }
