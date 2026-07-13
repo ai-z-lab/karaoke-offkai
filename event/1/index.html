@@ -543,8 +543,10 @@ main { padding: 16px; }
     </div>
     <div class="sql-block-wrap">
       <pre class="sql-block" id="sqlText">-- テーブル: 参加者
+-- event_id: どの回のデータかを表す（第一回=1, 第二回=2, …）
 create table if not exists participants (
   id          uuid primary key default gen_random_uuid(),
+  event_id    integer not null default 1,
   name        text not null,
   status      text not null
               check (status in ('going','maybe','tbd','absent')),
@@ -556,23 +558,30 @@ create table if not exists participants (
 -- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
 alter table participants add column if not exists threads_id text not null default '';
 alter table participants add column if not exists residence  text not null default '';
+alter table participants add column if not exists event_id   integer not null default 1;
 -- ▼ 既存DBの check 制約を更新して 'absent' を許可する（既存環境向け・必須）
 alter table participants drop constraint if exists participants_status_check;
 alter table participants add constraint participants_status_check
   check (status in ('going','maybe','tbd','absent'));
+create index if not exists idx_participants_event_id on participants(event_id);
 
 -- テーブル: 設定
+-- event_id=0 は全イベント共通（admin_pwのみ使用）、それ以外は各回専用の設定
 create table if not exists settings (
-  key   text primary key,
-  value text not null default ''
+  event_id integer not null default 1,
+  key      text not null,
+  value    text not null default '',
+  primary key (event_id, key)
 );
 
 -- テーブル: 時間帯ブロック
 create table if not exists time_blocks (
   id         uuid primary key default gen_random_uuid(),
+  event_id   integer not null default 1,
   label      text not null,
   sort_order integer not null default 0
 );
+create index if not exists idx_time_blocks_event_id on time_blocks(event_id);
 
 -- テーブル: 参加者↔時間帯ブロック（中間テーブル）
 create table if not exists participant_time_blocks (
@@ -581,21 +590,21 @@ create table if not exists participant_time_blocks (
   primary key (participant_id, time_block_id)
 );
 
--- 初期データ
-insert into settings (key, value) values
-  ('event_title',      'カラオケオフ会'),
-  ('event_datetime',   ''),
-  ('event_date',       ''),
-  ('event_start_time', ''),
-  ('event_end_time',   ''),
-  ('event_place',      ''),
-  ('event_place_url',  ''),
-  ('organizer_name',        ''),
-  ('organizer_threads_id',  ''),
-  ('event_notes',      ''),
-  ('notice',           ''),
-  ('admin_pw',         '')
-on conflict (key) do nothing;
+-- 初期データ（第一回 / event_id=1、admin_pwのみ event_id=0）
+insert into settings (event_id, key, value) values
+  (1, 'event_title',      'カラオケオフ会'),
+  (1, 'event_datetime',   ''),
+  (1, 'event_date',       ''),
+  (1, 'event_start_time', ''),
+  (1, 'event_end_time',   ''),
+  (1, 'event_place',      ''),
+  (1, 'event_place_url',  ''),
+  (1, 'organizer_name',        ''),
+  (1, 'organizer_threads_id',  ''),
+  (1, 'event_notes',      ''),
+  (1, 'notice',           ''),
+  (0, 'admin_pw',         '')
+on conflict (event_id, key) do nothing;
 
 -- RLS 有効化
 alter table participants            enable row level security;
@@ -654,14 +663,19 @@ alter publication supabase_realtime
 --
 -- ▼ 新しいキーを追加（存在しない場合）
 --
--- insert into settings (key, value) values
---   ('event_date',       ''),
---   ('event_start_time', ''),
---   ('event_end_time',   ''),
---   ('event_place_url',  ''),
---   ('organizer_name',        ''),
---   ('organizer_threads_id',  '')
--- on conflict (key) do nothing;</pre>
+-- insert into settings (event_id, key, value) values
+--   (1, 'event_date',       ''),
+--   (1, 'event_start_time', ''),
+--   (1, 'event_end_time',   ''),
+--   (1, 'event_place_url',  ''),
+--   (1, 'organizer_name',        ''),
+--   (1, 'organizer_threads_id',  '')
+-- on conflict (event_id, key) do nothing;
+--
+-- ▼ event_id列がまだ無い旧スキーマから移行する場合（イベントごとのデータ分離）
+--   詳しい手順はプロジェクトのやり取り、またはリポジトリのコミット履歴を参照。
+--   参加者・時間帯を event_id=1 に割り当てた上で settings を (event_id, key) の
+--   複合主キーへ変更し、admin_pw のみ event_id=0（全イベント共通）とする。</pre>
       <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
     </div>
 
@@ -940,7 +954,8 @@ alter publication supabase_realtime
             パスワードを変更する
           </button>
           <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
-            ※ シンプル化のため平文保存です。anon keyを知る人には見える設計のため、内輪利用限定としてください。
+            ※ シンプル化のため平文保存です。anon keyを知る人には見える設計のため、内輪利用限定としてください。<br>
+            ※ このパスワードは全イベント共通です。ここで変更すると他の回・トップページの管理者ログインにも反映されます。
           </p>
         </div>
 
@@ -1012,6 +1027,13 @@ alter publication supabase_realtime
 const DEFAULT_SB_URL = 'https://dwptswglclsstzbkdnmb.supabase.co';
 const DEFAULT_SB_KEY = 'sb_publishable_zIF7ZiROUPJb-YcVX4v_4w_sf8kb8ik';
 
+/* このページが担当するイベントのID。
+   event/N/ に複製して新しい回を作る際は、この値をNに変更すること。
+   参加者・時間帯・イベント情報は全てこのIDでSupabase上のデータを絞り込む。
+   admin_pw だけは event_id=0 の特別行を使い、全イベント共通のパスワードとする。 */
+const EVENT_ID = 1;
+const GLOBAL_SETTINGS_EVENT_ID = 0;
+
 /* ─── storage keys ──────────────────────── */
 const SK = {
   url:  'ok_sb_url',
@@ -1060,7 +1082,8 @@ async function handleSetup() {
 
     /* パスワードを平文でDBへ保存（シンプル化） */
     const { error: pwErr } = await sb
-      .from('settings').update({ value: pw }).eq('key', 'admin_pw');
+      .from('settings').update({ value: pw })
+      .eq('key', 'admin_pw').eq('event_id', GLOBAL_SETTINGS_EVENT_ID);
     if (pwErr) throw pwErr;
 
     /* 認証情報を保存（パスワード自体は保存しない） */
@@ -1091,7 +1114,9 @@ async function bootApp() {
 
 /* ─── data fetch ────────────────────────── */
 async function fetchSettings() {
-  const { data, error } = await sb.from('settings').select('*');
+  const { data, error } = await sb
+    .from('settings').select('*')
+    .in('event_id', [EVENT_ID, GLOBAL_SETTINGS_EVENT_ID]);
   if (error) { console.error(error); return; }
   settings = Object.fromEntries(data.map(r => [r.key, r.value]));
   applySettings();
@@ -1100,6 +1125,7 @@ async function fetchSettings() {
 async function fetchTimeBlocks() {
   const { data, error } = await sb
     .from('time_blocks').select('*')
+    .eq('event_id', EVENT_ID)
     .order('sort_order', { ascending: true });
   if (error) {
     console.error(error);
@@ -1116,13 +1142,19 @@ async function fetchTimeBlocks() {
 }
 
 async function fetchParticipants() {
-  const [partRes, ptbRes] = await Promise.all([
-    sb.from('participants').select('*').order('created_at', { ascending: true }),
-    sb.from('participant_time_blocks').select('*'),
-  ]);
+  const partRes = await sb
+    .from('participants').select('*')
+    .eq('event_id', EVENT_ID)
+    .order('created_at', { ascending: true });
   if (partRes.error) { console.error(partRes.error); return; }
-  participants          = partRes.data ?? [];
-  participantTimeBlocks = ptbRes.data  ?? [];
+  participants = partRes.data ?? [];
+
+  const ids = participants.map(p => p.id);
+  const ptbRes = ids.length
+    ? await sb.from('participant_time_blocks').select('*').in('participant_id', ids)
+    : { data: [] };
+  participantTimeBlocks = ptbRes.data ?? [];
+
   renderList();
   if (adminUnlocked) renderAdminList();
 }
@@ -1222,9 +1254,9 @@ function applySettings() {
 /* ─── realtime ──────────────────────────── */
 function subscribeRealtime() {
   if (rtChannel) sb.removeChannel(rtChannel);
-  rtChannel = sb.channel('offkai-rt')
+  rtChannel = sb.channel('offkai-rt-' + EVENT_ID)
     .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'participants' },
+        { event: '*', schema: 'public', table: 'participants', filter: `event_id=eq.${EVENT_ID}` },
         () => fetchParticipants())
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'participant_time_blocks' },
@@ -1233,7 +1265,7 @@ function subscribeRealtime() {
         { event: '*', schema: 'public', table: 'settings' },
         () => fetchSettings())
     .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'time_blocks' },
+        { event: '*', schema: 'public', table: 'time_blocks', filter: `event_id=eq.${EVENT_ID}` },
         () => fetchTimeBlocks())
     .subscribe();
 }
@@ -1337,7 +1369,7 @@ async function register() {
 
   setLoading('regBtn', true, '登録中…');
   const { data: inserted, error } = await sb
-    .from('participants').insert({ name, status, comment, residence, threads_id }).select('id');
+    .from('participants').insert({ name, status, comment, residence, threads_id, event_id: EVENT_ID }).select('id');
   setLoading('regBtn', false, '登録する');
 
   if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
@@ -1396,7 +1428,7 @@ function adminLogout() {
 
 async function deleteAllParticipants() {
   if (!confirm('本当に全員削除しますか？\nこの操作は取り消せません。')) return;
-  const { error } = await sb.from('participants').delete().neq('id', 0);
+  const { error } = await sb.from('participants').delete().eq('event_id', EVENT_ID);
   if (error) { toast('削除に失敗しました: ' + error.message, 'err'); return; }
   toast('参加者を全員削除しました');
 }
@@ -1443,7 +1475,7 @@ function editTbInline(tbId) {
 async function saveTbEdit(tbId) {
   const label = id('tbi-' + tbId)?.value.trim();
   if (!label) { toast('ラベルを入力してください', 'err'); return; }
-  const { error } = await sb.from('time_blocks').update({ label }).eq('id', tbId);
+  const { error } = await sb.from('time_blocks').update({ label }).eq('id', tbId).eq('event_id', EVENT_ID);
   if (error) { toast('更新失敗', 'err'); return; }
   toast('更新しました');
 }
@@ -1451,7 +1483,7 @@ async function saveTbEdit(tbId) {
 async function deleteTb(tbId) {
   const tb = timeBlocks.find(t => t.id === tbId);
   if (!confirm(`「${tb?.label}」を削除しますか？`)) return;
-  const { error } = await sb.from('time_blocks').delete().eq('id', tbId);
+  const { error } = await sb.from('time_blocks').delete().eq('id', tbId).eq('event_id', EVENT_ID);
   if (error) { toast('削除失敗', 'err'); return; }
   toast('削除しました');
 }
@@ -1463,8 +1495,8 @@ async function moveTb(tbId, dir) {
   const aOrder = timeBlocks[idx].sort_order;
   const bOrder = swap.sort_order;
   const updates = [
-    sb.from('time_blocks').update({ sort_order: bOrder }).eq('id', tbId),
-    sb.from('time_blocks').update({ sort_order: aOrder }).eq('id', swap.id),
+    sb.from('time_blocks').update({ sort_order: bOrder }).eq('id', tbId).eq('event_id', EVENT_ID),
+    sb.from('time_blocks').update({ sort_order: aOrder }).eq('id', swap.id).eq('event_id', EVENT_ID),
   ];
   const res = await Promise.all(updates);
   if (res.some(r => r.error)) { toast('並び替え失敗', 'err'); }
@@ -1476,7 +1508,7 @@ async function addTimeBlock() {
   const maxOrder = timeBlocks.reduce((m, t) => Math.max(m, t.sort_order), -1);
   const btn = id('tbAddBtn');
   if (btn) { btn.disabled = true; btn.textContent = '追加中…'; }
-  const { error } = await sb.from('time_blocks').insert({ label, sort_order: maxOrder + 1 });
+  const { error } = await sb.from('time_blocks').insert({ label, sort_order: maxOrder + 1, event_id: EVENT_ID });
   if (btn) { btn.disabled = false; btn.textContent = '＋ 追加'; }
   if (error) { toast('追加失敗: ' + error.message, 'err'); return; }
   if (id('tbNewLabel')) id('tbNewLabel').value = '';
@@ -1678,7 +1710,7 @@ async function importAdjustCSV(input) {
       .from('participants')
       .insert({ name: job.name, status: job.status,
                 threads_id: job.threads_id, comment: job.comment,
-                residence: '' });
+                residence: '', event_id: EVENT_ID });
 
     if (error) {
       importResults.push({ name: job.name, status: 'err', reason: error.message });
@@ -1787,7 +1819,7 @@ async function saveEdit(pid, i) {
     toast('その名前はすでに存在します', 'err'); return;
   }
   const { error } = await sb.from('participants')
-    .update({ name, status, comment, residence, threads_id }).eq('id', pid);
+    .update({ name, status, comment, residence, threads_id }).eq('id', pid).eq('event_id', EVENT_ID);
   if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
 
   /* 時間帯の更新: 既存を全削除してから再挿入 */
@@ -1806,7 +1838,7 @@ async function saveEdit(pid, i) {
 async function deletePart(pid, i) {
   const name = participants[i]?.name ?? '';
   if (!confirm(`「${name}」を削除しますか？`)) return;
-  const { error } = await sb.from('participants').delete().eq('id', pid);
+  const { error } = await sb.from('participants').delete().eq('id', pid).eq('event_id', EVENT_ID);
   if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
   toast('削除しました');
 }
@@ -1836,7 +1868,7 @@ async function selfLookup() {
 
   /* 最新データをDBから取得 */
   const { data, error } = await sb
-    .from('participants').select('*').eq('id', found.id).maybeSingle();
+    .from('participants').select('*').eq('id', found.id).eq('event_id', EVENT_ID).maybeSingle();
   if (error) { toast('取得失敗: ' + error.message, 'err'); return; }
   renderSelfEditForm(data ?? found);
 }
@@ -1915,7 +1947,7 @@ async function saveSelfEdit(pid) {
 
   setLoading('seSaveBtn', true, '保存中…');
   const { error } = await sb.from('participants')
-    .update({ status, comment, residence, threads_id }).eq('id', pid);
+    .update({ status, comment, residence, threads_id }).eq('id', pid).eq('event_id', EVENT_ID);
 
   if (!error) {
     await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
@@ -1938,7 +1970,7 @@ async function saveSelfEdit(pid) {
 async function deleteSelf(pid, name) {
   if (!confirm(`「${name}」の登録を削除しますか？`)) return;
   setLoading('seDeleteBtn', true, '削除中…');
-  const { error } = await sb.from('participants').delete().eq('id', pid);
+  const { error } = await sb.from('participants').delete().eq('id', pid).eq('event_id', EVENT_ID);
   setLoading('seDeleteBtn', false, '削除');
   if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
   toast('削除しました');
@@ -1953,7 +1985,8 @@ async function deleteSelf(pid, name) {
 async function saveNotice() {
   const v = id('adminNotice').value.trim();
   setLoading('noticeSaveBtn', true, '保存中…');
-  const { error } = await sb.from('settings').update({ value: v }).eq('key', 'notice');
+  const { error } = await sb.from('settings')
+    .upsert({ event_id: EVENT_ID, key: 'notice', value: v });
   setLoading('noticeSaveBtn', false, '保存する');
   if (error) { toast('保存失敗', 'err'); return; }
   toast('お知らせを更新しました');
@@ -1973,7 +2006,7 @@ async function saveInfo() {
   ];
   setLoading('infoSaveBtn', true, '保存中…');
   const promises = updates.map(u =>
-    sb.from('settings').upsert({ key: u.key, value: u.value })
+    sb.from('settings').upsert({ event_id: EVENT_ID, key: u.key, value: u.value })
   );
   const results = await Promise.all(promises);
   setLoading('infoSaveBtn', false, '保存する');
@@ -1987,7 +2020,8 @@ async function changeAdminPw() {
   if (!newPw) { toast('新しいパスワードを入力してください', 'err'); return; }
   if (newPw.length < 4) { toast('4文字以上で設定してください', 'err'); return; }
   setLoading('pwChangeBtn', true, '更新中…');
-  const { error } = await sb.from('settings').update({ value: newPw }).eq('key', 'admin_pw');
+  const { error } = await sb.from('settings').update({ value: newPw })
+    .eq('key', 'admin_pw').eq('event_id', GLOBAL_SETTINGS_EVENT_ID);
   setLoading('pwChangeBtn', false, 'パスワードを変更する');
   if (error) { toast('更新失敗', 'err'); return; }
   id('adminNewPw').value = '';
