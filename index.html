@@ -4,18 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#fdf6ec">
-<title>カラオケオフ会 参加管理</title>
+<title>鳥取大好きThreadsオフ会</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root {
   --bg:      #fdf6ec;
   --card:    #ffffff;
+  --surface: #fff8f0;
   --border:  #f0d9c0;
   --accent:  #e05c2a;   /* terracotta orange */
   --accent2: #f5a623;   /* mango orange      */
   --text:    #2c1a0e;
   --muted:   #8a6a50;
+  --danger:  #dc2626;
   --r:       14px;
   --rsm:     9px;
+  --rp:      99px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
@@ -32,12 +36,13 @@ body {
     radial-gradient(ellipse 70% 40% at 70% 0%, rgba(224,92,42,.10) 0%, transparent 70%),
     radial-gradient(ellipse 60% 35% at 20% 100%, rgba(245,166,35,.08) 0%, transparent 65%),
     var(--bg);
+  padding-bottom: 60px;
 }
 
 .page {
   max-width: 480px;
   margin: 0 auto;
-  padding: 40px 20px 60px;
+  padding: 40px 20px 0;
 }
 
 .page-logo { font-size: 44px; text-align: center; margin-bottom: 8px; }
@@ -81,38 +86,433 @@ body {
 .empty-state {
   text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0;
 }
+
+/* ═══ ADMIN TOGGLE / FORM ═══════════════════ */
+.admin-toggle {
+  display: block; width: 100%; margin-top: 28px;
+  background: none; border: 1.5px dashed var(--border);
+  border-radius: var(--r); padding: 14px;
+  color: var(--muted); font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.admin-toggle:hover { border-color: var(--accent); color: var(--accent); background: rgba(224,92,42,.04); }
+
+.form-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 18px; margin-top: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.form-heading {
+  font-size: 14px; font-weight: 700; color: var(--accent2);
+  margin-bottom: 16px;
+}
+.field-wrap { margin-bottom: 14px; }
+.field-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+}
+.text-input, .pw-input {
+  width: 100%;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  color: var(--text); font-size: 16px; font-family: inherit;
+  outline: none; transition: border-color .2s;
+  -webkit-appearance: none;
+}
+.text-input:focus, .pw-input:focus { border-color: var(--accent); }
+
+.btn {
+  display: block; width: 100%; padding: 13px;
+  border: none; border-radius: var(--r);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-family: inherit; letter-spacing: .02em;
+  transition: opacity .2s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .4; pointer-events: none; }
+.btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff; }
+.btn-sm {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: auto; padding: 8px 16px;
+  font-size: 12px; font-weight: 700; border-radius: 8px;
+}
+.btn-edit   { background: rgba(245,166,35,.12); color: #b07000; border: 1px solid rgba(245,166,35,.4); }
+.btn-delete { background: rgba(220,38,38,.09);  color: var(--danger); border: 1px solid rgba(220,38,38,.3); }
+.btn-ghost  { background: rgba(0,0,0,.04); color: var(--muted); border: 1px solid var(--border); }
+
+.section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 20px 0 10px;
+}
+
+.ev-admin-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 12px; margin-bottom: 10px;
+}
+.ev-admin-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.ev-admin-row .text-input { margin: 0; }
+.ev-no-input  { flex: 0 0 64px; }
+.ev-title-input { flex: 1; min-width: 0; }
+.ev-date-input { flex: 0 0 150px; }
+.ev-url-input { flex: 1; min-width: 0; }
+.ev-admin-actions { display: flex; gap: 8px; }
+
+.hidden { display: none !important; }
+
+/* ═══ SPINNER ════════════════════════════ */
+.spinner-inline {
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .55s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ TOAST ══════════════════════════════ */
+.toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 10px 22px; border-radius: var(--rp);
+  font-size: 13px; font-weight: 700;
+  z-index: 200; opacity: 0; pointer-events: none;
+  white-space: nowrap; max-width: 88vw;
+  transition: opacity .28s, transform .28s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-ok   { background: #2e9e5b; color: #fff; }
+.toast-err  { background: var(--danger); color: #fff; }
+.toast-info { background: var(--accent2); color: #fff; }
+
+/* ═══ DB SETUP HINT ═══════════════════════ */
+.cfg-hint {
+  font-size: 11px; color: var(--muted); line-height: 1.75;
+  background: rgba(245,166,35,.08); border: 1px solid rgba(245,166,35,.3);
+  border-radius: var(--rsm); padding: 11px 13px; margin-bottom: 14px;
+}
+.sql-block-wrap { position: relative; margin-bottom: 4px; }
+.sql-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  font-size: 10.5px; color: #7c4a00; line-height: 1.7;
+  font-family: 'Menlo', monospace; white-space: pre;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  max-height: 220px; overflow-y: auto;
+}
+.sql-copy-btn {
+  position: absolute; top: 7px; right: 7px;
+  background: rgba(224,92,42,.12); border: 1px solid rgba(224,92,42,.3);
+  color: var(--accent); padding: 4px 11px;
+  border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
 </style>
 </head>
 <body>
 
 <div class="page">
   <div class="page-logo">🎤</div>
-  <div class="page-title">カラオケオフ会 参加管理</div>
+  <div class="page-title">鳥取大好きThreadsオフ会</div>
   <div class="page-sub">開催回を選んでください</div>
 
-  <div class="event-list">
-    <a class="event-card" href="event/1/index.html">
-      <div class="event-card-body">
-        <div class="event-card-title">第一回 カラオケオフ会</div>
-        <div class="event-card-date">7/13</div>
-      </div>
-      <div class="event-card-arrow">→</div>
-    </a>
+  <div class="event-list" id="eventList">
+    <div class="empty-state">読み込み中…</div>
+  </div>
 
-    <!--
-      第二回以降を追加する場合は、event/2/ などに現在の参加管理アプリを
-      配置した上で、下記のようにカードを追加してください。
+  <!-- 管理者ログイン -->
+  <button class="admin-toggle" id="adminToggleBtn" onclick="toggleAdmin()">⚙️ 管理者はこちら</button>
 
-    <a class="event-card" href="event/2/index.html">
-      <div class="event-card-body">
-        <div class="event-card-title">第二回 カラオケオフ会</div>
-        <div class="event-card-date">日付未定</div>
+  <div class="form-card hidden" id="adminLockCard">
+    <div class="form-heading">🔐 管理者ログイン</div>
+    <div class="field-wrap">
+      <input class="pw-input" id="adminPwInput" type="password"
+        placeholder="パスワード"
+        onkeydown="if(event.key==='Enter')adminLogin()">
+    </div>
+    <button class="btn btn-primary" onclick="adminLogin()">ログイン</button>
+  </div>
+
+  <div class="hidden" id="adminPanel">
+
+    <div class="form-card hidden" id="dbHintCard">
+      <div class="form-heading">⚠️ イベント一覧テーブルが未作成です</div>
+      <div class="cfg-hint">
+        Supabaseの <b>SQL Editor</b> で下記SQLを一度実行すると、
+        このページからイベントの追加・編集ができるようになります。
       </div>
-      <div class="event-card-arrow">→</div>
-    </a>
-    -->
+      <div class="sql-block-wrap">
+        <pre class="sql-block" id="eventsSqlText">-- テーブル: イベント一覧（トップページ管理用）
+create table if not exists events (
+  id          uuid primary key default gen_random_uuid(),
+  event_no    integer not null,
+  title       text not null,
+  event_date  date,
+  url         text not null,
+  created_at  timestamptz not null default now(),
+  unique (event_no)
+);
+
+alter table events enable row level security;
+
+create policy "read_events"   on events for select using (true);
+create policy "insert_events" on events for insert with check (true);
+create policy "update_events" on events for update using (true);
+create policy "delete_events" on events for delete using (true);
+
+alter publication supabase_realtime add table events;
+
+insert into events (event_no, title, event_date, url) values
+  (1, '第一回 カラオケオフ会', '2026-07-13', 'event/1/index.html')
+on conflict (event_no) do nothing;</pre>
+        <button class="sql-copy-btn" onclick="copyEventsSQL()">コピー</button>
+      </div>
+    </div>
+
+    <div class="section-label">イベントを編集・削除</div>
+    <div id="eventAdminList"></div>
+
+    <div class="form-card">
+      <div class="form-heading">＋ イベントを追加</div>
+      <div class="ev-admin-row">
+        <input class="text-input ev-no-input" id="newEvNo" type="number" placeholder="回" min="1">
+        <input class="text-input ev-title-input" id="newEvTitle" type="text" placeholder="イベント名（例：第二回 カラオケオフ会）" maxlength="60">
+      </div>
+      <div class="ev-admin-row">
+        <input class="text-input ev-date-input" id="newEvDate" type="date">
+        <input class="text-input ev-url-input" id="newEvUrl" type="text" placeholder="URL（例：event/2/index.html）" maxlength="300">
+      </div>
+      <button class="btn btn-primary" id="newEvAddBtn" onclick="addEvent()">追加する</button>
+    </div>
+
+    <div style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="adminLogout()">ログアウト</button>
+    </div>
   </div>
 </div>
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+'use strict';
+
+const DEFAULT_SB_URL = 'https://dwptswglclsstzbkdnmb.supabase.co';
+const DEFAULT_SB_KEY = 'sb_publishable_zIF7ZiROUPJb-YcVX4v_4w_sf8kb8ik';
+
+const SK = { url: 'ok_sb_url', key: 'ok_sb_key' };
+
+const FALLBACK_EVENTS = [
+  { id: 'fallback-1', event_no: 1, title: '第一回 カラオケオフ会', event_date: '2026-07-13', url: 'event/1/index.html' },
+];
+
+let sb              = null;
+let events          = [];
+let eventsTableError = false;
+let adminPw         = '';
+let adminUnlocked   = false;
+let rtChannel       = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const url = ls(SK.url) || DEFAULT_SB_URL;
+  const key = ls(SK.key) || DEFAULT_SB_KEY;
+  sb = supabase.createClient(url, key);
+  boot();
+});
+
+async function boot() {
+  await Promise.all([fetchEvents(), fetchAdminPw()]);
+  subscribeRealtime();
+}
+
+function subscribeRealtime() {
+  if (rtChannel) sb.removeChannel(rtChannel);
+  rtChannel = sb.channel('event-list-rt')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => fetchEvents())
+    .subscribe();
+}
+
+async function fetchEvents() {
+  const { data, error } = await sb.from('events').select('*').order('event_no', { ascending: true });
+  if (error) {
+    eventsTableError = true;
+    events = FALLBACK_EVENTS;
+  } else {
+    eventsTableError = false;
+    events = data ?? [];
+  }
+  renderEventList();
+  if (adminUnlocked) renderEventAdmin();
+}
+
+async function fetchAdminPw() {
+  const { data, error } = await sb.from('settings').select('value').eq('key', 'admin_pw').maybeSingle();
+  if (error) { adminPw = ''; return; }
+  adminPw = data?.value ?? '';
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '日付未定';
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function renderEventList() {
+  const c = id('eventList');
+  if (!events.length) {
+    c.innerHTML = '<div class="empty-state">まだイベントがありません</div>';
+    return;
+  }
+  c.innerHTML = events.map(ev => `
+    <a class="event-card" href="${esc(ev.url)}">
+      <div class="event-card-body">
+        <div class="event-card-title">${esc(ev.title)}</div>
+        <div class="event-card-date">${esc(formatDateShort(ev.event_date))}</div>
+      </div>
+      <div class="event-card-arrow">→</div>
+    </a>`).join('');
+}
+
+function renderEventAdmin() {
+  id('dbHintCard').classList.toggle('hidden', !eventsTableError);
+  const c = id('eventAdminList');
+  if (eventsTableError) { c.innerHTML = ''; return; }
+  if (!events.length) {
+    c.innerHTML = '<div class="empty-state" style="padding:16px 0">まだイベントがありません</div>';
+    return;
+  }
+  c.innerHTML = events.map(ev => `
+    <div class="ev-admin-item">
+      <div class="ev-admin-row">
+        <input class="text-input ev-no-input" type="number" min="1" value="${esc(ev.event_no)}" id="ev-no-${ev.id}">
+        <input class="text-input ev-title-input" type="text" maxlength="60" value="${esc(ev.title)}" id="ev-title-${ev.id}">
+      </div>
+      <div class="ev-admin-row">
+        <input class="text-input ev-date-input" type="date" value="${esc(ev.event_date ?? '')}" id="ev-date-${ev.id}">
+        <input class="text-input ev-url-input" type="text" maxlength="300" value="${esc(ev.url)}" id="ev-url-${ev.id}">
+      </div>
+      <div class="ev-admin-actions">
+        <button class="btn btn-sm btn-edit" onclick="saveEvent('${ev.id}')">保存</button>
+        <button class="btn btn-sm btn-delete" onclick="deleteEvent('${ev.id}')">削除</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ─── admin auth ────────────────────────── */
+function toggleAdmin() {
+  id('adminLockCard').classList.toggle('hidden');
+}
+
+async function adminLogin() {
+  const input = id('adminPwInput').value;
+  if (!adminPw) {
+    toast('パスワードが未設定です。各回のページで初回セットアップを完了してください。', 'err');
+    return;
+  }
+  if (input !== adminPw) {
+    toast('パスワードが違います', 'err');
+    return;
+  }
+  adminUnlocked = true;
+  id('adminToggleBtn').classList.add('hidden');
+  id('adminLockCard').classList.add('hidden');
+  id('adminPanel').classList.remove('hidden');
+  id('adminPwInput').value = '';
+  renderEventAdmin();
+  toast('管理者モード ON', 'info');
+}
+
+function adminLogout() {
+  adminUnlocked = false;
+  id('adminToggleBtn').classList.remove('hidden');
+  id('adminPanel').classList.add('hidden');
+  toast('ログアウトしました');
+}
+
+/* ─── event CRUD ────────────────────────── */
+async function addEvent() {
+  const event_no   = parseInt(id('newEvNo').value, 10);
+  const title       = id('newEvTitle').value.trim();
+  const event_date  = id('newEvDate').value || null;
+  const url         = id('newEvUrl').value.trim();
+
+  if (!event_no)  { toast('回数を入力してください', 'err'); return; }
+  if (!title)     { toast('イベント名を入力してください', 'err'); return; }
+  if (!url)       { toast('URLを入力してください', 'err'); return; }
+
+  setLoading('newEvAddBtn', true, '追加中…');
+  const { error } = await sb.from('events').insert({ event_no, title, event_date, url });
+  setLoading('newEvAddBtn', false, '追加する');
+  if (error) {
+    toast('追加に失敗しました: ' + (error.code === '23505' ? 'その回数はすでに使われています' : error.message), 'err');
+    return;
+  }
+  id('newEvNo').value = '';
+  id('newEvTitle').value = '';
+  id('newEvDate').value = '';
+  id('newEvUrl').value = '';
+  toast('イベントを追加しました');
+  fetchEvents();
+}
+
+async function saveEvent(eventId) {
+  const event_no  = parseInt(id('ev-no-' + eventId).value, 10);
+  const title      = id('ev-title-' + eventId).value.trim();
+  const event_date = id('ev-date-' + eventId).value || null;
+  const url        = id('ev-url-' + eventId).value.trim();
+
+  if (!event_no) { toast('回数を入力してください', 'err'); return; }
+  if (!title)    { toast('イベント名を入力してください', 'err'); return; }
+  if (!url)      { toast('URLを入力してください', 'err'); return; }
+
+  const { error } = await sb.from('events')
+    .update({ event_no, title, event_date, url }).eq('id', eventId);
+  if (error) {
+    toast('保存に失敗しました: ' + (error.code === '23505' ? 'その回数はすでに使われています' : error.message), 'err');
+    return;
+  }
+  toast('保存しました');
+  fetchEvents();
+}
+
+async function deleteEvent(eventId) {
+  if (!confirm('このイベントを削除しますか？')) return;
+  const { error } = await sb.from('events').delete().eq('id', eventId);
+  if (error) { toast('削除に失敗しました: ' + error.message, 'err'); return; }
+  toast('削除しました');
+  fetchEvents();
+}
+
+function copyEventsSQL() {
+  const sql = id('eventsSqlText').textContent;
+  navigator.clipboard.writeText(sql)
+    .then(() => toast('SQLをコピーしました', 'info'))
+    .catch(() => toast('コピーに失敗しました', 'err'));
+}
+
+/* ─── utils ─────────────────────────────── */
+function id(x) { return document.getElementById(x); }
+function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+function setLoading(btnId, loading, label) {
+  const btn = id(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading ? `<span class="spinner-inline"></span>${label}` : label;
+}
+let toastTimer = null;
+function toast(msg, type = 'ok') {
+  const el = id('toastEl');
+  el.textContent = msg;
+  el.className = 'toast show toast-' + (type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+</script>
 
 </body>
 </html>
