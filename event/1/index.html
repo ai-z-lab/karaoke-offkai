@@ -56,6 +56,13 @@ body {
 .header-inner {
   padding: 14px 16px 0;
 }
+.back-link-row { margin-bottom: 10px; }
+.back-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; color: var(--accent);
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
 .header-top {
   display: flex; align-items: flex-start;
   justify-content: space-between; gap: 10px;
@@ -696,6 +703,10 @@ alter publication supabase_realtime
 
   <header class="app-header">
     <div class="header-inner">
+      <div class="back-link-row">
+        <a class="back-link" href="../../index.html">← イベント一覧に戻る</a>
+      </div>
+
       <div class="header-top">
         <div class="event-title-display" id="eventTitleDisplay">🎤 カラオケオフ会</div>
         <div class="live-pill"><div class="live-dot"></div>LIVE</div>
