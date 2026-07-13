@@ -121,6 +121,12 @@ body {
   -webkit-appearance: none;
 }
 .text-input:focus, .pw-input:focus { border-color: var(--accent); }
+/* type="date" はネイティブのカレンダーUIを維持する（Safari等でappearance:noneにすると
+   カレンダーアイコン/ピッカーが表示されなくなるため上書きする） */
+input.text-input[type="date"] {
+  -webkit-appearance: auto;
+  appearance: auto;
+}
 
 .btn {
   display: block; width: 100%; padding: 13px;
