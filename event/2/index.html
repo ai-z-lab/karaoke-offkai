@@ -1052,6 +1052,20 @@ const SK = {
   // パスワード自体はlocalStorageに保存しない
 };
 
+/* ─── 管理者セッション（トップページ・他の回のページと共有） ──
+   同じブラウザで一度ログインすれば、7日間は他のページに移動しても
+   パスワード再入力が不要になる。ログアウトすると全ページで解除される。 */
+const ADMIN_SESSION_KEY     = 'ok_admin_session';
+const ADMIN_SESSION_TTL_MS  = 7 * 24 * 60 * 60 * 1000;
+
+function isAdminSessionValid() {
+  const raw = ls(ADMIN_SESSION_KEY);
+  const ts  = raw ? parseInt(raw, 10) : NaN;
+  return !!ts && (Date.now() - ts) < ADMIN_SESSION_TTL_MS;
+}
+function markAdminSession()  { lsSet(ADMIN_SESSION_KEY, String(Date.now())); }
+function clearAdminSession() { try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch {} }
+
 /* ─── state ─────────────────────────────── */
 let sb                    = null;
 let participants          = [];
@@ -1122,6 +1136,7 @@ async function bootApp() {
   id('appRoot').classList.remove('hidden');
   await Promise.all([fetchSettings(), fetchTimeBlocks(), fetchParticipants(), fetchEventMeta()]);
   subscribeRealtime();
+  if (isAdminSessionValid()) await unlockAdminUI(true);
 }
 
 /* ─── data fetch ────────────────────────── */
@@ -1421,6 +1436,20 @@ async function register() {
 }
 
 /* ─── admin auth ────────────────────────── */
+async function unlockAdminUI(silent) {
+  adminUnlocked = true;
+  id('adminLockCard').classList.add('hidden');
+  id('adminPanel').classList.remove('hidden');
+  /* フォームを最新データで再描画（パネル表示後に呼ぶことで確実に反映） */
+  await fetchSettings();
+  renderTbAdmin();
+  renderAdminList();
+  if (timeBlocksTableError) {
+    toast('⚠️ time_blocksテーブルが未作成です。セットアップSQLを再実行してください', 'err');
+  }
+  if (!silent) toast('管理者モード ON', 'info');
+}
+
 async function adminLogin() {
   const input      = id('adminPwInput').value;
   const storedPw   = settings.admin_pw ?? '';
@@ -1433,17 +1462,8 @@ async function adminLogin() {
     toast('パスワードが違います', 'err'); return;
   }
 
-  adminUnlocked = true;
-  id('adminLockCard').classList.add('hidden');
-  id('adminPanel').classList.remove('hidden');
-  /* フォームを最新データで再描画（パネル表示後に呼ぶことで確実に反映） */
-  await fetchSettings();
-  renderTbAdmin();
-  renderAdminList();
-  if (timeBlocksTableError) {
-    toast('⚠️ time_blocksテーブルが未作成です。セットアップSQLを再実行してください', 'err');
-  }
-  toast('管理者モード ON', 'info');
+  markAdminSession();
+  await unlockAdminUI(false);
 }
 
 function adminLogout() {
@@ -1451,6 +1471,7 @@ function adminLogout() {
   id('adminLockCard').classList.remove('hidden');
   id('adminPanel').classList.add('hidden');
   id('adminPwInput').value = '';
+  clearAdminSession();
   toast('ログアウトしました');
 }
 

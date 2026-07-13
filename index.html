@@ -332,6 +332,20 @@ const FALLBACK_EVENTS = [
   { id: 'fallback-1', event_no: 1, title: '第一回 カラオケオフ会', event_date: '2026-07-13', url: 'event/1/index.html' },
 ];
 
+/* ─── 管理者セッション（各回のページと共有） ──
+   同じブラウザで一度ログインすれば、7日間は他のページに移動しても
+   パスワード再入力が不要になる。ログアウトすると全ページで解除される。 */
+const ADMIN_SESSION_KEY    = 'ok_admin_session';
+const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isAdminSessionValid() {
+  const raw = ls(ADMIN_SESSION_KEY);
+  const ts  = raw ? parseInt(raw, 10) : NaN;
+  return !!ts && (Date.now() - ts) < ADMIN_SESSION_TTL_MS;
+}
+function markAdminSession()  { lsSet(ADMIN_SESSION_KEY, String(Date.now())); }
+function clearAdminSession() { try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch {} }
+
 let sb              = null;
 let events          = [];
 let eventsTableError = false;
@@ -349,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function boot() {
   await Promise.all([fetchEvents(), fetchAdminPw()]);
   subscribeRealtime();
+  if (isAdminSessionValid()) unlockAdminUI(true);
 }
 
 function subscribeRealtime() {
@@ -450,6 +465,16 @@ function toggleAdmin() {
   id('adminLockCard').classList.toggle('hidden');
 }
 
+function unlockAdminUI(silent) {
+  adminUnlocked = true;
+  id('adminToggleBtn').classList.add('hidden');
+  id('adminLockCard').classList.add('hidden');
+  id('adminPanel').classList.remove('hidden');
+  id('adminPwInput').value = '';
+  renderEventAdmin();
+  if (!silent) toast('管理者モード ON', 'info');
+}
+
 async function adminLogin() {
   const input = id('adminPwInput').value;
   if (!adminPw) {
@@ -460,19 +485,15 @@ async function adminLogin() {
     toast('パスワードが違います', 'err');
     return;
   }
-  adminUnlocked = true;
-  id('adminToggleBtn').classList.add('hidden');
-  id('adminLockCard').classList.add('hidden');
-  id('adminPanel').classList.remove('hidden');
-  id('adminPwInput').value = '';
-  renderEventAdmin();
-  toast('管理者モード ON', 'info');
+  markAdminSession();
+  unlockAdminUI(false);
 }
 
 function adminLogout() {
   adminUnlocked = false;
   id('adminToggleBtn').classList.remove('hidden');
   id('adminPanel').classList.add('hidden');
+  clearAdminSession();
   toast('ログアウトしました');
 }
 
@@ -550,6 +571,7 @@ function copyEventsSQL() {
 /* ─── utils ─────────────────────────────── */
 function id(x) { return document.getElementById(x); }
 function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
