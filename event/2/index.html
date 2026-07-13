@@ -232,6 +232,13 @@ main { padding: 16px; }
 .text-input:focus,
 .pw-input:focus,
 .textarea-input:focus { border-color: var(--accent); }
+/* type="date"/"time" はネイティブのカレンダー・時刻ピッカーUIを維持する
+   （Safari等でappearance:noneにするとピッカーが表示されなくなるため上書きする） */
+input.text-input[type="date"],
+input.text-input[type="time"] {
+  -webkit-appearance: auto;
+  appearance: auto;
+}
 .textarea-input { resize: vertical; min-height: 76px; font-size: 14px; line-height: 1.5; }
 .textarea-input.auto-expand { resize: none; overflow: hidden; min-height: calc(1.5em * 5 + 22px); }
 .datetime-picker-wrap { display: flex; flex-direction: column; gap: 8px; }
