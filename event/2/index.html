@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#fdf6ec">
+<title>カラオケオフ会 参加管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* ═══════════════════════════════════════
+   DESIGN TOKENS
+   明るい会場＋暖色スポット：クリーム色の空間に
+   テラコッタとマンゴーオレンジの2色。
+   カラオケらしい賑やかで親しみやすい雰囲気。
+═══════════════════════════════════════ */
+:root {
+  --bg:        #fdf6ec;
+  --surface:   #fff8f0;
+  --card:      #ffffff;
+  --border:    #f0d9c0;
+  --accent:    #e05c2a;   /* terracotta orange */
+  --accent2:   #f5a623;   /* mango orange      */
+  --going:     #2e9e5b;
+  --maybe:     #d97706;
+  --tbd:       #7a8fa6;
+  --absent:    #9ca3af;
+  --text:      #2c1a0e;
+  --muted:     #8a6a50;
+  --danger:    #dc2626;
+  --r:         14px;
+  --rsm:       9px;
+  --rp:        99px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+               'Noto Sans JP', Meiryo, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  padding-bottom: 80px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══ HEADER ═══════════════════════════ */
+.app-header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(253,246,236,.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  padding: 14px 16px 0;
+}
+.back-link-row { margin-bottom: 10px; }
+.back-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; color: var(--accent);
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+.header-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 10px;
+  margin-bottom: 12px;
+}
+.event-title-display {
+  font-size: 19px; font-weight: 800; line-height: 1.2;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+/* signature: live indicator with glow */
+.live-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(46,158,91,.1);
+  border: 1px solid rgba(46,158,91,.35);
+  border-radius: var(--rp);
+  padding: 3px 10px; flex-shrink: 0; margin-top: 2px;
+  font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  color: var(--going);
+  box-shadow: 0 0 8px rgba(46,158,91,.2);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--going);
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* event info block */
+.event-info-block {
+  font-size: 12px; color: var(--muted); line-height: 1.9;
+  margin-bottom: 12px;
+}
+.event-info-block span { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+/* notice banner */
+.notice-wrap { margin-bottom: 12px; }
+.notice-banner {
+  background: linear-gradient(90deg,rgba(224,92,42,.1),rgba(245,166,35,.08));
+  border: 1px solid rgba(224,92,42,.3);
+  border-radius: var(--rsm);
+  padding: 9px 13px;
+  font-size: 12px; color: var(--text); line-height: 1.7;
+}
+.notice-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .08em;
+  color: var(--accent); margin-bottom: 3px;
+}
+.notice-body {
+  white-space: pre-wrap; word-break: break-all;
+  overflow: hidden;
+}
+.notice-body.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.notice-toggle {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 700;
+}
+.notice-toggle:hover { text-decoration: underline; }
+
+/* tabs */
+.tabs {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+.tab-btn {
+  flex: 1; padding: 10px 4px;
+  background: none; border: none;
+  border-bottom: 2.5px solid transparent;
+  color: var(--muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: color .2s, border-color .2s;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ═══ MAIN ══════════════════════════════ */
+main { padding: 16px; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ═══ STATS ═════════════════════════════ */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(2,1fr);
+  gap: 8px; margin-bottom: 18px;
+}
+.stat-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 13px 6px; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.stat-num { font-size: 32px; font-weight: 800; line-height: 1; }
+.stat-num.going   { color: var(--going); }
+.stat-num.maybe   { color: var(--maybe); }
+.stat-num.tbd     { color: var(--tbd); }
+.stat-num.absent  { color: var(--absent); }
+.stat-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+/* ═══ PARTICIPANT LIST ══════════════════ */
+.group-block { margin-bottom: 22px; }
+.group-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 9px;
+}
+.g-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.g-dot.going   { background: var(--going); }
+.g-dot.maybe   { background: var(--maybe); }
+.g-dot.tbd     { background: var(--tbd); }
+.g-dot.absent  { background: var(--absent); }
+.g-name { font-size: 13px; font-weight: 700; }
+.g-name.going  { color: var(--going); }
+.g-name.maybe  { color: var(--maybe); }
+.g-name.tbd    { color: var(--tbd); }
+.g-name.absent { color: var(--absent); }
+.g-count { font-size: 11px; color: var(--muted); }
+
+.p-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 7px;
+}
+.p-body { flex: 1; min-width: 0; }
+.p-name-text { font-size: 15px; font-weight: 600; }
+.p-comment-text { font-size: 11px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+
+.empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; }
+
+/* ═══ FORM ══════════════════════════════ */
+.form-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 18px; margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.form-heading {
+  font-size: 14px; font-weight: 700; color: var(--accent2);
+  margin-bottom: 16px;
+}
+.field-wrap { margin-bottom: 14px; }
+.field-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+}
+.field-required { color: var(--accent); }
+
+.text-input,
+.pw-input,
+.textarea-input {
+  width: 100%;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  color: var(--text); font-size: 16px; font-family: inherit;
+  outline: none; transition: border-color .2s;
+  -webkit-appearance: none;
+}
+.text-input:focus,
+.pw-input:focus,
+.textarea-input:focus { border-color: var(--accent); }
+.textarea-input { resize: vertical; min-height: 76px; font-size: 14px; line-height: 1.5; }
+.textarea-input.auto-expand { resize: none; overflow: hidden; min-height: calc(1.5em * 5 + 22px); }
+.datetime-picker-wrap { display: flex; flex-direction: column; gap: 8px; }
+.time-range-wrap { display: flex; align-items: center; gap: 6px; }
+.time-range-wrap .time-input { flex: 1; }
+.time-sep { font-size: 16px; font-weight: 600; color: var(--muted); flex-shrink: 0; }
+
+/* radio pills */
+.pill-group { display: flex; gap: 7px; flex-wrap: wrap; }
+.pill-group input[type=radio] { display: none; }
+.pill-label {
+  padding: 8px 15px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--rp);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--muted);
+  transition: all .18s; white-space: nowrap;
+}
+.pill-group input[value=going]:checked   + .pill-label {
+  border-color: var(--going); color: var(--going); background: rgba(46,158,91,.1); }
+.pill-group input[value=maybe]:checked   + .pill-label {
+  border-color: var(--maybe); color: var(--maybe); background: rgba(217,119,6,.1); }
+.pill-group input[value=tbd]:checked     + .pill-label {
+  border-color: var(--tbd);   color: var(--tbd);   background: rgba(122,143,166,.1); }
+.pill-group input[value=absent]:checked  + .pill-label {
+  border-color: var(--absent); color: var(--absent); background: rgba(156,163,175,.1); }
+
+/* ═══ BUTTONS ════════════════════════════ */
+.btn {
+  display: block; width: 100%; padding: 13px;
+  border: none; border-radius: var(--r);
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-family: inherit; letter-spacing: .02em;
+  transition: opacity .2s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .4; pointer-events: none; }
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #fff;
+}
+.btn-sm {
+  display: inline-flex; align-items: center;
+  width: auto; padding: 5px 12px;
+  font-size: 11px; font-weight: 700; border-radius: 7px;
+}
+.btn-edit   { background: rgba(245,166,35,.12);  color: #b07000;        border: 1px solid rgba(245,166,35,.4); }
+.btn-delete { background: rgba(220,38,38,.09);  color: var(--danger);  border: 1px solid rgba(220,38,38,.3); }
+.btn-ghost  { background: rgba(0,0,0,.04);      color: var(--muted);   border: 1px solid var(--border); }
+
+/* ═══ ADMIN INLINE EDIT ════════════════= */
+.inline-edit-wrap { flex: 1; min-width: 0; }
+.inline-text-input {
+  width: 100%;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 7px; padding: 7px 11px;
+  color: var(--text); font-size: 14px; font-family: inherit;
+  outline: none; margin-bottom: 7px;
+}
+.inline-pill-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.inline-pill-group label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--muted); cursor: pointer;
+}
+.inline-pill-group input[type=radio] { accent-color: var(--accent); }
+.inline-actions { display: flex; gap: 7px; }
+
+/* ═══ SECTION LABEL ════════════════════ */
+.section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px;
+}
+
+/* ═══ SPINNER ════════════════════════════ */
+.spinner {
+  display: inline-block; width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .55s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ TOAST ══════════════════════════════ */
+.toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 10px 22px; border-radius: var(--rp);
+  font-size: 13px; font-weight: 700;
+  z-index: 200; opacity: 0; pointer-events: none;
+  white-space: nowrap; max-width: 88vw;
+  transition: opacity .28s, transform .28s;
+}
+.toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.toast-ok   { background: var(--going);  color: #fff; }
+.toast-err  { background: var(--danger); color: #fff; }
+.toast-info { background: var(--accent2); color: #fff; }
+
+/* ═══ IMPORT MODAL ══════════════════════ */
+.import-modal-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(44,26,14,.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.import-modal-overlay.hidden { display: none; }
+.import-modal-box {
+  background: var(--card); border-radius: var(--r);
+  padding: 24px 20px; max-width: 480px; width: 100%;
+  max-height: 80dvh; display: flex; flex-direction: column;
+}
+.import-modal-title {
+  font-size: 16px; font-weight: 700; margin-bottom: 14px;
+}
+.import-modal-body {
+  overflow-y: auto; flex: 1; font-size: 14px; line-height: 1.7;
+}
+.import-result-item { padding: 4px 0; }
+.import-result-ok   { color: var(--going); }
+.import-result-skip { color: var(--muted); }
+.import-result-err  { color: var(--danger); }
+
+/* ═══ CONFIG SCREEN ═════════════════════ */
+#configScreen {
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 28px 20px;
+  background:
+    radial-gradient(ellipse 70% 40% at 70% 10%, rgba(224,92,42,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 35% at 20% 85%, rgba(245,166,35,.1) 0%, transparent 65%),
+    var(--bg);
+}
+.cfg-logo { font-size: 52px; margin-bottom: 6px; }
+.cfg-title {
+  font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 6px;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cfg-sub { font-size: 12px; color: var(--muted); text-align: center; margin-bottom: 28px; line-height: 1.7; }
+.cfg-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px; width: 100%; max-width: 420px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.cfg-section-title {
+  font-size: 11px; font-weight: 800; letter-spacing: .08em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 14px;
+}
+.cfg-hint {
+  font-size: 11px; color: var(--muted); line-height: 1.75;
+  background: rgba(245,166,35,.08); border: 1px solid rgba(245,166,35,.3);
+  border-radius: var(--rsm); padding: 11px 13px; margin-bottom: 16px;
+}
+.cfg-hint a { color: var(--accent); text-decoration: none; }
+.cfg-hint code {
+  background: rgba(0,0,0,.06); padding: 1px 5px;
+  border-radius: 4px; font-size: 11px; font-family: monospace;
+}
+.sql-block-wrap {
+  position: relative; margin-bottom: 16px;
+}
+.sql-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 11px 13px;
+  font-size: 10.5px; color: #7c4a00; line-height: 1.7;
+  font-family: 'Menlo', monospace; white-space: pre;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  max-height: 180px; overflow-y: auto;
+}
+.sql-copy-btn {
+  position: absolute; top: 7px; right: 7px;
+  background: rgba(224,92,42,.12); border: 1px solid rgba(224,92,42,.3);
+  color: var(--accent); padding: 4px 11px;
+  border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+}
+
+/* ═══ THREADS ID / RESIDENCE ════════════════ */
+.p-threads-id {
+  font-size: 11px; color: var(--accent); font-weight: 600;
+  margin-top: 1px; word-break: break-all;
+}
+.p-residence {
+  font-size: 11px; color: var(--muted); margin-top: 1px;
+}
+
+/* ═══ TIME BLOCKS ERROR NOTICE ══════════════ */
+.tb-error-notice {
+  background: rgba(220,38,38,.07); border: 1px solid rgba(220,38,38,.25);
+  border-radius: var(--rsm); padding: 10px 13px; margin-bottom: 8px;
+  font-size: 12px; color: var(--danger); line-height: 1.7;
+}
+
+/* ═══ SELF EDIT ══════════════════════════════ */
+.self-toggle {
+  display: block; width: 100%; margin-bottom: 16px;
+  background: none; border: 1.5px dashed var(--border);
+  border-radius: var(--r); padding: 16px;
+  color: var(--text); font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.self-toggle:hover { border-color: var(--accent); color: var(--accent); background: rgba(224,92,42,.04); }
+.self-lookup-row { display: flex; gap: 8px; }
+.self-lookup-row .text-input { margin: 0; }
+.self-lookup-btn {
+  flex-shrink: 0; padding: 11px 16px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #fff; border: none; border-radius: var(--rsm);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+}
+.self-lookup-btn:disabled { opacity: .4; pointer-events: none; }
+.self-result-name {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.self-actions { display: flex; gap: 8px; margin-top: 4px; }
+.btn-danger       { background: rgba(220,38,38,.08); color: var(--danger); border: 1px solid rgba(220,38,38,.3); }
+.btn-danger:hover { background: rgba(220,38,38,.15); }
+.btn-danger-solid { background: #dc2626; color: #fff; border: none; border-radius: var(--r);
+                    padding: 12px 28px; font-size: 14px; font-weight: 700; cursor: pointer;
+                    letter-spacing: .03em; }
+.btn-danger-solid:hover { background: #b91c1c; }
+.btn-danger-full {
+  flex: 1; padding: 11px;
+  background: rgba(220,38,38,.08); border: 1.5px solid rgba(220,38,38,.3);
+  border-radius: var(--r); color: var(--danger);
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+
+/* ═══ TIME BLOCK TAGS (participant list) ════ */
+.tb-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.tb-tag {
+  display: inline-flex; align-items: center;
+  background: rgba(224,92,42,.1); border: 1px solid rgba(224,92,42,.3);
+  color: var(--accent); border-radius: var(--rp);
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ═══ TIME BLOCK CHECKBOXES (registration) ══ */
+.tb-check-group { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.tb-check-item { display: flex; align-items: center; gap: 6px; }
+.tb-check-item input[type=checkbox] {
+  accent-color: var(--accent); width: 16px; height: 16px;
+  flex-shrink: 0; cursor: pointer;
+}
+.tb-check-item label {
+  font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap;
+}
+
+/* ═══ TIME BLOCK ADMIN LIST ═════════════════ */
+.tb-admin-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--rsm); padding: 9px 11px;
+  margin-bottom: 6px;
+}
+.tb-admin-label { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.tb-admin-inline { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.tb-admin-inline input {
+  flex: 1; background: var(--card); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 5px 9px;
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+.tb-move-btn {
+  background: rgba(0,0,0,.05); border: 1px solid var(--border);
+  color: var(--muted); width: 28px; height: 28px;
+  border-radius: 6px; font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-family: inherit;
+}
+.tb-add-row { display: flex; gap: 8px; margin-top: 10px; }
+.tb-add-row .text-input { margin: 0; }
+.tb-add-btn {
+  flex-shrink: 0; padding: 11px 16px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #fff; border: none; border-radius: var(--rsm);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+}
+
+/* hide/show */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     CONFIG SCREEN — 初回セットアップ
+══════════════════════════════════════════ -->
+<div id="configScreen" class="hidden">
+  <div class="cfg-logo">🎤</div>
+  <div class="cfg-title">オフ会 参加管理</div>
+  <div class="cfg-sub">初回のみ設定が必要です<br>次回以降は自動で接続されます</div>
+
+  <div class="cfg-card">
+    <div class="cfg-section-title">Step 1 — SQLを実行</div>
+    <div class="cfg-hint">
+      <a href="https://supabase.com" target="_blank">supabase.com</a> で無料プロジェクトを作成し、<br>
+      <b>SQL Editor</b> に下記をコピーして実行してください。
+    </div>
+    <div class="sql-block-wrap">
+      <pre class="sql-block" id="sqlText">-- テーブル: 参加者
+create table if not exists participants (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  status      text not null
+              check (status in ('going','maybe','tbd','absent')),
+  comment     text not null default '',
+  threads_id  text not null default '',
+  residence   text not null default '',
+  created_at  timestamptz not null default now()
+);
+-- 既存テーブルへのカラム追加（既存環境向け・初回は不要）
+alter table participants add column if not exists threads_id text not null default '';
+alter table participants add column if not exists residence  text not null default '';
+-- ▼ 既存DBの check 制約を更新して 'absent' を許可する（既存環境向け・必須）
+alter table participants drop constraint if exists participants_status_check;
+alter table participants add constraint participants_status_check
+  check (status in ('going','maybe','tbd','absent'));
+
+-- テーブル: 設定
+create table if not exists settings (
+  key   text primary key,
+  value text not null default ''
+);
+
+-- テーブル: 時間帯ブロック
+create table if not exists time_blocks (
+  id         uuid primary key default gen_random_uuid(),
+  label      text not null,
+  sort_order integer not null default 0
+);
+
+-- テーブル: 参加者↔時間帯ブロック（中間テーブル）
+create table if not exists participant_time_blocks (
+  participant_id uuid references participants(id) on delete cascade,
+  time_block_id  uuid references time_blocks(id)  on delete cascade,
+  primary key (participant_id, time_block_id)
+);
+
+-- 初期データ
+insert into settings (key, value) values
+  ('event_title',      'カラオケオフ会'),
+  ('event_datetime',   ''),
+  ('event_date',       ''),
+  ('event_start_time', ''),
+  ('event_end_time',   ''),
+  ('event_place',      ''),
+  ('event_place_url',  ''),
+  ('event_notes',      ''),
+  ('notice',           ''),
+  ('admin_pw',         '')
+on conflict (key) do nothing;
+
+-- RLS 有効化
+alter table participants            enable row level security;
+alter table settings                enable row level security;
+alter table time_blocks             enable row level security;
+alter table participant_time_blocks enable row level security;
+
+-- participants: 全員が読み書き可
+create policy "read_participants"
+  on participants for select using (true);
+create policy "insert_participants"
+  on participants for insert with check (true);
+create policy "update_participants"
+  on participants for update using (true);
+create policy "delete_participants"
+  on participants for delete using (true);
+
+-- settings: 全員が読み書き可（内輪利用前提）
+create policy "read_settings"
+  on settings for select using (true);
+create policy "insert_settings"
+  on settings for insert with check (true);
+create policy "update_settings"
+  on settings for update using (true);
+
+-- time_blocks: 全員が読み書き可
+create policy "read_time_blocks"
+  on time_blocks for select using (true);
+create policy "insert_time_blocks"
+  on time_blocks for insert with check (true);
+create policy "update_time_blocks"
+  on time_blocks for update using (true);
+create policy "delete_time_blocks"
+  on time_blocks for delete using (true);
+
+-- participant_time_blocks: 全員が読み書き可
+create policy "read_ptb"
+  on participant_time_blocks for select using (true);
+create policy "insert_ptb"
+  on participant_time_blocks for insert with check (true);
+create policy "delete_ptb"
+  on participant_time_blocks for delete using (true);
+
+-- Realtime
+alter publication supabase_realtime
+  add table participants, settings, time_blocks, participant_time_blocks;
+
+-- ════════════════════════════════════════════════════
+-- 既存DBへのマイグレーション（すでにテーブルがある場合のみ実行）
+-- ════════════════════════════════════════════════════
+-- ▼ settings に INSERT ポリシーを追加（必須）
+--   「保存失敗: new row violates row-level security policy」が出る場合はこれを実行
+--
+-- create policy "insert_settings"
+--   on settings for insert with check (true);
+--
+-- ▼ 新しいキーを追加（存在しない場合）
+--
+-- insert into settings (key, value) values
+--   ('event_date',       ''),
+--   ('event_start_time', ''),
+--   ('event_end_time',   ''),
+--   ('event_place_url',  '')
+-- on conflict (key) do nothing;</pre>
+      <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
+    </div>
+
+    <div class="cfg-section-title" style="margin-top:6px">Step 2 — API情報を入力</div>
+    <div class="cfg-hint">
+      <b>Project Settings → API</b> から取得してください。<br>
+      ・<code>Project URL</code><br>
+      ・<code>anon public</code> キー
+    </div>
+
+    <div class="field-wrap">
+      <label class="field-label">Project URL</label>
+      <input class="text-input" id="cfgUrl" type="url"
+        placeholder="https://xxxxxxxx.supabase.co"
+        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">anon public key</label>
+      <input class="text-input" id="cfgKey" type="text"
+        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">管理者パスワード（自分で決める）</label>
+      <input class="text-input" id="cfgPw" type="text"
+        placeholder="半角英数字推奨"
+        autocomplete="off" autocorrect="off" autocapitalize="off">
+      <p style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">
+        ※ シンプル化のため平文でDBに保存されます。グルチャ内輪利用前提としてください。
+      </p>
+    </div>
+
+    <button class="btn btn-primary" id="cfgConnectBtn" onclick="handleSetup()">
+      接続してスタート
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     APP
+══════════════════════════════════════════ -->
+<div id="appRoot" class="hidden">
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="back-link-row">
+        <a class="back-link" href="../../index.html">← イベント一覧に戻る</a>
+      </div>
+
+      <div class="header-top">
+        <div class="event-title-display" id="eventTitleDisplay">🎤 カラオケオフ会</div>
+        <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+      </div>
+
+      <!-- event info -->
+      <div class="event-info-block" id="eventInfoBlock"></div>
+
+      <!-- notice -->
+      <div class="notice-wrap hidden" id="noticeWrap">
+        <div class="notice-banner">
+          <div class="notice-eyebrow">📢 お知らせ</div>
+          <div id="noticeText" class="notice-body collapsed"></div>
+          <span id="noticeToggle" class="notice-toggle hidden" onclick="toggleNotice()">▼ もっと見る</span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="list"     onclick="switchTab(this)">一覧</button>
+        <button class="tab-btn"        data-tab="register" onclick="switchTab(this)">参加登録</button>
+        <button class="tab-btn"        data-tab="admin"    onclick="switchTab(this)">管理</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── 一覧タブ ─────────────────────────── -->
+    <div class="tab-pane active" id="pane-list">
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num going" id="cnt-going">—</div>
+          <div class="stat-label">✅ 参加する</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num maybe" id="cnt-maybe">—</div>
+          <div class="stat-label">🤔 検討中</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num tbd" id="cnt-tbd">—</div>
+          <div class="stat-label">⏰ 時間未定</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num absent" id="cnt-absent">—</div>
+          <div class="stat-label">🚫 欠席</div>
+        </div>
+      </div>
+
+      <div id="listContainer">
+        <div class="empty-state">読み込み中…</div>
+      </div>
+    </div>
+
+    <!-- ── 参加登録タブ ──────────────────────── -->
+    <div class="tab-pane" id="pane-register">
+      <div class="form-card">
+        <div class="form-heading">✏️ 参加登録</div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regName">
+            名前 <span class="field-required">*</span>
+          </label>
+          <input class="text-input" id="regName" type="text"
+            placeholder="表示名（20文字以内）" maxlength="20"
+            autocomplete="off" autocorrect="off" autocapitalize="off">
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">
+            ステータス <span class="field-required">*</span>
+          </label>
+          <div class="pill-group">
+            <input type="radio" name="regStatus" id="rs-going" value="going" onchange="updateRegTbVisibility()">
+            <label class="pill-label" for="rs-going">✅ 参加する</label>
+            <input type="radio" name="regStatus" id="rs-maybe" value="maybe" checked onchange="updateRegTbVisibility()">
+            <label class="pill-label" for="rs-maybe">🤔 検討中</label>
+            <input type="radio" name="regStatus" id="rs-tbd"   value="tbd" onchange="updateRegTbVisibility()">
+            <label class="pill-label" for="rs-tbd">⏰ 時間未定</label>
+            <input type="radio" name="regStatus" id="rs-absent" value="absent" onchange="updateRegTbVisibility()">
+            <label class="pill-label" for="rs-absent">🚫 欠席</label>
+          </div>
+        </div>
+
+        <div class="field-wrap hidden" id="regTbWrap">
+          <label class="field-label">参加できる時間帯（任意・複数選択可）</label>
+          <div class="tb-check-group" id="regTbGroup"></div>
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regResidence">お住まい（任意）</label>
+          <input class="text-input" id="regResidence" type="text"
+            placeholder="例：鳥取市、米子市など" maxlength="40"
+            autocomplete="off" autocorrect="off">
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regThreadsId">Threads ID（任意）</label>
+          <input class="text-input" id="regThreadsId" type="text"
+            placeholder="例：@your_id" maxlength="40"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label" for="regComment">コメント（任意・40文字）</label>
+          <input class="text-input" id="regComment" type="text"
+            placeholder="例：19時ごろ合流予定" maxlength="40"
+            autocomplete="off" autocorrect="off">
+        </div>
+
+        <button class="btn btn-primary" id="regBtn" onclick="register()">
+          登録する
+        </button>
+      </div>
+
+      <!-- 本人編集 -->
+      <button class="self-toggle" onclick="toggleSelfEdit()">
+        📝 すでに登録済みの方はこちら
+      </button>
+      <div class="form-card hidden" id="selfEditCard">
+        <div class="form-heading">📝 登録内容を変更・削除する</div>
+        <div class="field-wrap">
+          <label class="field-label">登録時の名前（完全一致）</label>
+          <div class="self-lookup-row">
+            <input class="text-input" id="selfNameInput" type="text"
+              placeholder="登録した名前を入力" maxlength="20"
+              autocomplete="off" autocorrect="off" autocapitalize="off"
+              onkeydown="if(event.key==='Enter')selfLookup()">
+            <button class="self-lookup-btn" id="selfLookupBtn" onclick="selfLookup()">呼び出す</button>
+          </div>
+        </div>
+        <div id="selfEditForm" class="hidden"></div>
+      </div>
+    </div>
+
+    <!-- ── 管理タブ ─────────────────────────── -->
+    <div class="tab-pane" id="pane-admin">
+
+      <!-- ロック画面 -->
+      <div class="form-card" id="adminLockCard">
+        <div class="form-heading">🔐 管理者ログイン</div>
+        <div class="field-wrap">
+          <input class="pw-input" id="adminPwInput" type="password"
+            placeholder="パスワード"
+            onkeydown="if(event.key==='Enter')adminLogin()">
+        </div>
+        <button class="btn btn-primary" onclick="adminLogin()">ログイン</button>
+      </div>
+
+      <!-- 管理パネル -->
+      <div id="adminPanel" class="hidden">
+
+        <!-- お知らせ -->
+        <div class="form-card">
+          <div class="form-heading">📢 お知らせ</div>
+          <div class="field-wrap">
+            <textarea class="textarea-input auto-expand" id="adminNotice" rows="5"
+              placeholder="告知・変更情報など（空にするとバナー非表示）"
+              oninput="autoExpand(this)"></textarea>
+          </div>
+          <button class="btn btn-primary" id="noticeSaveBtn" onclick="saveNotice()">
+            保存する
+          </button>
+        </div>
+
+        <!-- イベント情報 -->
+        <div class="form-card">
+          <div class="form-heading">📋 イベント情報</div>
+          <div class="field-wrap">
+            <label class="field-label">イベント名</label>
+            <input class="text-input" id="adminTitle" type="text"
+              placeholder="例：カラオケオフ会 6/15（土）" maxlength="40">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">日時</label>
+            <div class="datetime-picker-wrap">
+              <input class="text-input" id="adminEventDate" type="date">
+              <div class="time-range-wrap">
+                <input class="text-input time-input" id="adminStartTime" type="time">
+                <span class="time-sep">〜</span>
+                <input class="text-input time-input" id="adminEndTime" type="time">
+              </div>
+            </div>
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">場所</label>
+            <input class="text-input" id="adminPlace" type="text"
+              placeholder="例：渋谷 カラオケパセラ" maxlength="60">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">場所URL <span style="font-weight:400;font-size:13px;color:var(--muted)">（任意・GoogleマップなどのURL）</span></label>
+            <input class="text-input" id="adminPlaceUrl" type="url"
+              placeholder="例：https://maps.google.com/..." maxlength="500">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">注意事項</label>
+            <textarea class="textarea-input" id="adminNotes"
+              placeholder="例：フリータイム制。途中参加・退出OK。" maxlength="200"></textarea>
+          </div>
+          <button class="btn btn-primary" id="infoSaveBtn" onclick="saveInfo()">
+            保存する
+          </button>
+        </div>
+
+        <!-- パスワード変更 -->
+        <div class="form-card">
+          <div class="form-heading">🔑 管理者パスワード変更</div>
+          <div class="field-wrap">
+            <label class="field-label">新しいパスワード</label>
+            <input class="text-input" id="adminNewPw" type="text"
+              placeholder="新しいパスワード" maxlength="64"
+              autocomplete="off" autocorrect="off" autocapitalize="off">
+          </div>
+          <button class="btn btn-primary" id="pwChangeBtn" onclick="changeAdminPw()">
+            パスワードを変更する
+          </button>
+          <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
+            ※ シンプル化のため平文保存です。anon keyを知る人には見える設計のため、内輪利用限定としてください。
+          </p>
+        </div>
+
+        <!-- 時間帯ブロック管理 -->
+        <div class="form-card">
+          <div class="form-heading">⏰ 時間帯ブロック管理</div>
+          <div id="tbAdminList">
+            <div class="empty-state" style="padding:16px 0">まだ時間帯がありません</div>
+          </div>
+          <div class="tb-add-row">
+            <input class="text-input" id="tbNewLabel" type="text"
+              placeholder="例：お昼、夕方、夜など（20文字）" maxlength="20"
+              autocomplete="off" autocorrect="off"
+              onkeydown="if(event.key==='Enter')addTimeBlock()">
+            <button class="tb-add-btn" id="tbAddBtn" onclick="addTimeBlock()">＋ 追加</button>
+          </div>
+        </div>
+
+        <!-- 参加者管理 -->
+        <div class="section-label">参加者を編集・削除</div>
+        <div id="adminListContainer">
+          <div class="empty-state">読み込み中…</div>
+        </div>
+
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button class="btn btn-ghost" onclick="downloadCSV()"
+            style="width:auto;padding:9px 20px;font-size:13px">
+            📥 CSVをダウンロード
+          </button>
+          <label class="btn btn-ghost" style="width:auto;padding:9px 20px;font-size:13px;cursor:pointer">
+            📤 調整さんCSVインポート
+            <input type="file" accept=".csv,text/csv"
+              style="display:none" onchange="importAdjustCSV(this)">
+          </label>
+          <button class="btn btn-ghost" onclick="adminLogout()"
+            style="width:auto;padding:9px 20px;font-size:13px">
+            ログアウト
+          </button>
+        </div>
+        <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
+          <button class="btn btn-danger-solid" onclick="deleteAllParticipants()">
+            🗑️ 参加者を全員削除
+          </button>
+        </div>
+      </div>
+    </div><!-- /pane-admin -->
+
+  </main>
+</div><!-- /appRoot -->
+
+<!-- CSVインポート結果モーダル -->
+<div id="importModal" class="import-modal-overlay hidden" onclick="if(event.target===this)closeImportModal()">
+  <div class="import-modal-box">
+    <div class="import-modal-title">📤 インポート結果</div>
+    <div id="importModalBody" class="import-modal-body"></div>
+    <button class="btn btn-primary" onclick="closeImportModal()" style="margin-top:16px">閉じる</button>
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<!-- ══════════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ─── hardcoded defaults ────────────────── */
+const DEFAULT_SB_URL = 'https://dwptswglclsstzbkdnmb.supabase.co';
+const DEFAULT_SB_KEY = 'sb_publishable_zIF7ZiROUPJb-YcVX4v_4w_sf8kb8ik';
+
+/* ─── storage keys ──────────────────────── */
+const SK = {
+  url:  'ok_sb_url',
+  key:  'ok_sb_key',
+  // パスワード自体はlocalStorageに保存しない
+};
+
+/* ─── state ─────────────────────────────── */
+let sb                    = null;
+let participants          = [];
+let settings              = {};   // key→value map
+let timeBlocks            = [];   // [{id, label, sort_order}]
+let participantTimeBlocks = [];   // [{participant_id, time_block_id}]
+let timeBlocksTableError  = false; // true if time_blocks table missing in Supabase
+let adminUnlocked         = false;
+let rtChannel             = null;
+
+/* ─── startup ───────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  /* ?setup をURLに付けると管理者用セットアップ画面を表示 */
+  if (location.search.includes('setup')) {
+    id('configScreen').classList.remove('hidden');
+    return;
+  }
+  /* localStorageにカスタム接続情報があればそちらを優先、なければデフォルト値を使用 */
+  const url = ls(SK.url) || DEFAULT_SB_URL;
+  const key = ls(SK.key) || DEFAULT_SB_KEY;
+  sb = supabase.createClient(url, key);
+  bootApp();
+});
+
+/* ─── setup ─────────────────────────────── */
+async function handleSetup() {
+  const url = id('cfgUrl').value.trim();
+  const key = id('cfgKey').value.trim();
+  const pw  = id('cfgPw').value.trim();
+  if (!url || !key) { toast('URLとAPIキーを入力してください', 'err'); return; }
+  if (!pw)          { toast('管理者パスワードを決めてください', 'err'); return; }
+
+  setLoading('cfgConnectBtn', true, '接続中…');
+  try {
+    sb = supabase.createClient(url, key);
+    /* 接続テスト */
+    const { error: testErr } = await sb.from('settings').select('key').limit(1);
+    if (testErr) throw testErr;
+
+    /* パスワードを平文でDBへ保存（シンプル化） */
+    const { error: pwErr } = await sb
+      .from('settings').update({ value: pw }).eq('key', 'admin_pw');
+    if (pwErr) throw pwErr;
+
+    /* 認証情報を保存（パスワード自体は保存しない） */
+    lsSet(SK.url, url);
+    lsSet(SK.key, key);
+
+    bootApp();
+  } catch(e) {
+    setLoading('cfgConnectBtn', false, '接続してスタート');
+    toast('接続失敗: ' + (e.message ?? 'URL/キーを確認してください'), 'err');
+  }
+}
+
+function copySQL() {
+  const sql = id('sqlText').textContent;
+  navigator.clipboard.writeText(sql)
+    .then(() => toast('SQLをコピーしました', 'info'))
+    .catch(() => toast('コピーに失敗しました', 'err'));
+}
+
+/* ─── app boot ──────────────────────────── */
+async function bootApp() {
+  id('configScreen').classList.add('hidden');
+  id('appRoot').classList.remove('hidden');
+  await Promise.all([fetchSettings(), fetchTimeBlocks(), fetchParticipants()]);
+  subscribeRealtime();
+}
+
+/* ─── data fetch ────────────────────────── */
+async function fetchSettings() {
+  const { data, error } = await sb.from('settings').select('*');
+  if (error) { console.error(error); return; }
+  settings = Object.fromEntries(data.map(r => [r.key, r.value]));
+  applySettings();
+}
+
+async function fetchTimeBlocks() {
+  const { data, error } = await sb
+    .from('time_blocks').select('*')
+    .order('sort_order', { ascending: true });
+  if (error) {
+    console.error(error);
+    timeBlocksTableError = true;
+    timeBlocks = [];
+    renderRegTbCheckboxes();
+    if (adminUnlocked) renderTbAdmin();
+    return;
+  }
+  timeBlocksTableError = false;
+  timeBlocks = data ?? [];
+  renderRegTbCheckboxes();
+  if (adminUnlocked) renderTbAdmin();
+}
+
+async function fetchParticipants() {
+  const [partRes, ptbRes] = await Promise.all([
+    sb.from('participants').select('*').order('created_at', { ascending: true }),
+    sb.from('participant_time_blocks').select('*'),
+  ]);
+  if (partRes.error) { console.error(partRes.error); return; }
+  participants          = partRes.data ?? [];
+  participantTimeBlocks = ptbRes.data  ?? [];
+  renderList();
+  if (adminUnlocked) renderAdminList();
+}
+
+/* ─── format date/time fields into display string ── */
+function formatDatetime(dateStr, startTime, endTime) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['日','月','火','水','木','金','土'];
+  const month = d.getMonth() + 1;
+  const day   = d.getDate();
+  const dow   = days[d.getDay()];
+  let result  = `${month}月${day}日（${dow}）`;
+  if (startTime) result += startTime;
+  if (endTime)   result += `〜${endTime}`;
+  else if (startTime) result += '〜';
+  return result;
+}
+
+/* ─── apply settings to UI ──────────────── */
+function applySettings() {
+  const title     = settings.event_title      || 'カラオケオフ会';
+  const eventDate = settings.event_date       || '';
+  const startTime = settings.event_start_time || '';
+  const endTime   = settings.event_end_time   || '';
+  const datetime  = formatDatetime(eventDate, startTime, endTime)
+                    || settings.event_datetime || '';
+  const place     = settings.event_place      || '';
+  const placeUrl  = settings.event_place_url  || '';
+  const notes     = settings.event_notes      || '';
+  const notice    = settings.notice           || '';
+
+  id('eventTitleDisplay').textContent = '🎤 ' + title;
+
+  /* event info block */
+  let infoHtml = '';
+  if (datetime) infoHtml += `📅<span>${esc(datetime)}</span>　`;
+  if (place) {
+    if (placeUrl) {
+      infoHtml += `📍<span><a href="${esc(placeUrl)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${esc(place)}</a></span>　`;
+    } else {
+      infoHtml += `📍<span>${esc(place)}</span>　`;
+    }
+  }
+  if (notes)    infoHtml += `<br>📝<span style="font-weight:400;color:var(--muted)">${esc(notes)}</span>`;
+  id('eventInfoBlock').innerHTML = infoHtml;
+  id('eventInfoBlock').style.display = infoHtml ? '' : 'none';
+
+  /* notice */
+  if (notice.trim()) {
+    const noticeEl = id('noticeText');
+    noticeEl.textContent = notice;
+    noticeEl.classList.add('collapsed');
+    id('noticeWrap').classList.remove('hidden');
+    /* トグルボタンは折りたたんだ時に内容が切れる場合のみ表示 */
+    requestAnimationFrame(() => {
+      const toggle = id('noticeToggle');
+      if (noticeEl.scrollHeight > noticeEl.clientHeight + 2) {
+        toggle.classList.remove('hidden');
+        toggle.textContent = '▼ もっと見る';
+      } else {
+        toggle.classList.add('hidden');
+      }
+    });
+  } else {
+    id('noticeWrap').classList.add('hidden');
+  }
+
+  /* admin fields — null guard in case panel is not yet in DOM */
+  const setVal = (elId, val) => { const el = id(elId); if (el) el.value = val; };
+  setVal('adminTitle',     title);
+  setVal('adminEventDate', eventDate);
+  setVal('adminStartTime', startTime);
+  setVal('adminEndTime',   endTime);
+  setVal('adminPlace',     place);
+  setVal('adminPlaceUrl',  placeUrl);
+  setVal('adminNotes',     notes);
+  setVal('adminNotice',    notice);
+  const noticeEl = id('adminNotice');
+  if (noticeEl) autoExpand(noticeEl);
+}
+
+/* ─── realtime ──────────────────────────── */
+function subscribeRealtime() {
+  if (rtChannel) sb.removeChannel(rtChannel);
+  rtChannel = sb.channel('offkai-rt')
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'participants' },
+        () => fetchParticipants())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'participant_time_blocks' },
+        () => fetchParticipants())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        () => fetchSettings())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'time_blocks' },
+        () => fetchTimeBlocks())
+    .subscribe();
+}
+
+/* ─── render list ───────────────────────── */
+const GROUP_META = [
+  { key: 'going',  emoji: '✅', label: '参加する', cls: 'going'  },
+  { key: 'maybe',  emoji: '🤔', label: '検討中',   cls: 'maybe'  },
+  { key: 'tbd',    emoji: '⏰', label: '時間未定', cls: 'tbd'    },
+  { key: 'absent', emoji: '🚫', label: '欠席',     cls: 'absent' },
+];
+
+function renderList() {
+  GROUP_META.forEach(g => {
+    id('cnt-' + g.key).textContent =
+      participants.filter(p => p.status === g.key).length;
+  });
+
+  const c = id('listContainer');
+  if (!participants.length) {
+    c.innerHTML = '<div class="empty-state">まだ参加者がいません<br>最初に登録してみよう！</div>';
+    return;
+  }
+
+  let html = '';
+  GROUP_META.forEach(g => {
+    const grp = participants.filter(p => p.status === g.key);
+    if (!grp.length) return;
+    html += `
+      <div class="group-block">
+        <div class="group-head">
+          <div class="g-dot ${g.cls}"></div>
+          <div class="g-name ${g.cls}">${g.emoji} ${g.label}</div>
+          <div class="g-count">${grp.length}人</div>
+        </div>`;
+    grp.forEach(p => {
+      const ptbs = participantTimeBlocks
+        .filter(r => r.participant_id === p.id)
+        .map(r => timeBlocks.find(tb => tb.id === r.time_block_id))
+        .filter(Boolean)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      const tbHtml = ptbs.length
+        ? `<div class="tb-tags">${ptbs.map(tb => `<span class="tb-tag">⏰ ${esc(tb.label)}</span>`).join('')}</div>`
+        : '';
+      html += `
+        <div class="p-item">
+          <div class="p-body">
+            <div class="p-name-text">${esc(p.name)}</div>
+            ${p.residence  ? `<div class="p-residence">📍 ${esc(p.residence)}</div>` : ''}
+            ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
+            ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+            ${tbHtml}
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+  c.innerHTML = html;
+}
+
+/* ─── time block checkboxes (registration) ── */
+function renderRegTbCheckboxes() {
+  const wrap  = id('regTbWrap');
+  const group = id('regTbGroup');
+  if (!wrap || !group) return;
+  if (!timeBlocks.length) { wrap.classList.add('hidden'); return; }
+  group.innerHTML = timeBlocks.map(tb => `
+    <div class="tb-check-item">
+      <input type="checkbox" id="rtb-${tb.id}" value="${tb.id}">
+      <label for="rtb-${tb.id}">${esc(tb.label)}</label>
+    </div>`).join('');
+  updateRegTbVisibility();
+}
+
+function updateRegTbVisibility() {
+  const wrap   = id('regTbWrap');
+  if (!wrap) return;
+  const status = document.querySelector('input[name=regStatus]:checked')?.value;
+  if (!timeBlocks.length || status === 'absent') {
+    wrap.classList.add('hidden');
+  } else {
+    wrap.classList.remove('hidden');
+  }
+}
+
+/* ─── register ──────────────────────────── */
+async function register() {
+  const name       = id('regName').value.trim();
+  const status     = document.querySelector('input[name=regStatus]:checked')?.value ?? 'maybe';
+  const residence  = id('regResidence').value.trim();
+  const threads_id = id('regThreadsId').value.trim();
+  const comment    = id('regComment').value.trim();
+
+  if (!name)  { toast('名前を入力してください', 'err'); return; }
+  if (participants.some(p => normalize(p.name) === normalize(name))) {
+    toast('その名前はすでに登録されています', 'err'); return;
+  }
+
+  const checkedTbIds = [...document.querySelectorAll('#regTbGroup input[type=checkbox]:checked')]
+    .map(el => el.value);
+
+  setLoading('regBtn', true, '登録中…');
+  const { data: inserted, error } = await sb
+    .from('participants').insert({ name, status, comment, residence, threads_id }).select('id');
+  setLoading('regBtn', false, '登録する');
+
+  if (error) { toast('登録失敗: ' + error.message, 'err'); return; }
+
+  if (checkedTbIds.length && inserted?.[0]?.id) {
+    const pid = inserted[0].id;
+    await sb.from('participant_time_blocks').insert(
+      checkedTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+    );
+  }
+
+  id('regName').value       = '';
+  id('regResidence').value  = '';
+  id('regThreadsId').value  = '';
+  id('regComment').value    = '';
+  document.getElementById('rs-maybe').checked = true;
+  document.querySelectorAll('#regTbGroup input[type=checkbox]')
+    .forEach(el => { el.checked = false; });
+  toast('登録しました！');
+  switchTab(document.querySelector('[data-tab=list]'));
+}
+
+/* ─── admin auth ────────────────────────── */
+async function adminLogin() {
+  const input      = id('adminPwInput').value;
+  const storedPw   = settings.admin_pw ?? '';
+
+  if (!storedPw) {
+    toast('パスワードが未設定です。初回セットアップを完了してください。', 'err');
+    return;
+  }
+  if (input !== storedPw) {
+    toast('パスワードが違います', 'err'); return;
+  }
+
+  adminUnlocked = true;
+  id('adminLockCard').classList.add('hidden');
+  id('adminPanel').classList.remove('hidden');
+  /* フォームを最新データで再描画（パネル表示後に呼ぶことで確実に反映） */
+  await fetchSettings();
+  renderTbAdmin();
+  renderAdminList();
+  if (timeBlocksTableError) {
+    toast('⚠️ time_blocksテーブルが未作成です。セットアップSQLを再実行してください', 'err');
+  }
+  toast('管理者モード ON', 'info');
+}
+
+function adminLogout() {
+  adminUnlocked = false;
+  id('adminLockCard').classList.remove('hidden');
+  id('adminPanel').classList.add('hidden');
+  id('adminPwInput').value = '';
+  toast('ログアウトしました');
+}
+
+async function deleteAllParticipants() {
+  if (!confirm('本当に全員削除しますか？\nこの操作は取り消せません。')) return;
+  const { error } = await sb.from('participants').delete().neq('id', 0);
+  if (error) { toast('削除に失敗しました: ' + error.message, 'err'); return; }
+  toast('参加者を全員削除しました');
+}
+
+/* ─── admin: time block management ─────── */
+function renderTbAdmin() {
+  const c = id('tbAdminList');
+  if (!c) return;
+  if (timeBlocksTableError) {
+    c.innerHTML = `<div class="tb-error-notice">
+      ⚠️ <b>time_blocks テーブルが見つかりません。</b><br>
+      セットアップ画面の SQL をコピーして Supabase の SQL Editor で再実行してください。
+    </div>`;
+    return;
+  }
+  if (!timeBlocks.length) {
+    c.innerHTML = '<div class="empty-state" style="padding:16px 0">まだ時間帯がありません。下の入力欄から追加してください。</div>';
+    return;
+  }
+  c.innerHTML = timeBlocks.map((tb, i) => `
+    <div class="tb-admin-item" id="tba-${tb.id}">
+      <div class="tb-admin-label">${esc(tb.label)}</div>
+      <button class="tb-move-btn" onclick="moveTb('${tb.id}',-1)" ${i===0?'disabled':''}>▲</button>
+      <button class="tb-move-btn" onclick="moveTb('${tb.id}',1)"  ${i===timeBlocks.length-1?'disabled':''}>▼</button>
+      <button class="btn btn-sm btn-edit"   onclick="editTbInline('${tb.id}')">編集</button>
+      <button class="btn btn-sm btn-delete" onclick="deleteTb('${tb.id}')">削除</button>
+    </div>`).join('');
+}
+
+function editTbInline(tbId) {
+  const tb   = timeBlocks.find(t => t.id === tbId);
+  const item = id('tba-' + tbId);
+  if (!tb || !item) return;
+  item.innerHTML = `
+    <div class="tb-admin-inline">
+      <input id="tbi-${tbId}" value="${esc(tb.label)}" maxlength="20"
+        onkeydown="if(event.key==='Enter')saveTbEdit('${tbId}')">
+    </div>
+    <button class="btn btn-sm btn-edit"  onclick="saveTbEdit('${tbId}')">保存</button>
+    <button class="btn btn-sm btn-ghost" onclick="renderTbAdmin()">戻る</button>`;
+  id('tbi-' + tbId)?.focus();
+}
+
+async function saveTbEdit(tbId) {
+  const label = id('tbi-' + tbId)?.value.trim();
+  if (!label) { toast('ラベルを入力してください', 'err'); return; }
+  const { error } = await sb.from('time_blocks').update({ label }).eq('id', tbId);
+  if (error) { toast('更新失敗', 'err'); return; }
+  toast('更新しました');
+}
+
+async function deleteTb(tbId) {
+  const tb = timeBlocks.find(t => t.id === tbId);
+  if (!confirm(`「${tb?.label}」を削除しますか？`)) return;
+  const { error } = await sb.from('time_blocks').delete().eq('id', tbId);
+  if (error) { toast('削除失敗', 'err'); return; }
+  toast('削除しました');
+}
+
+async function moveTb(tbId, dir) {
+  const idx  = timeBlocks.findIndex(t => t.id === tbId);
+  const swap = timeBlocks[idx + dir];
+  if (!swap) return;
+  const aOrder = timeBlocks[idx].sort_order;
+  const bOrder = swap.sort_order;
+  const updates = [
+    sb.from('time_blocks').update({ sort_order: bOrder }).eq('id', tbId),
+    sb.from('time_blocks').update({ sort_order: aOrder }).eq('id', swap.id),
+  ];
+  const res = await Promise.all(updates);
+  if (res.some(r => r.error)) { toast('並び替え失敗', 'err'); }
+}
+
+async function addTimeBlock() {
+  const label = id('tbNewLabel')?.value.trim();
+  if (!label) { toast('時間帯ラベルを入力してください', 'err'); return; }
+  const maxOrder = timeBlocks.reduce((m, t) => Math.max(m, t.sort_order), -1);
+  const btn = id('tbAddBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '追加中…'; }
+  const { error } = await sb.from('time_blocks').insert({ label, sort_order: maxOrder + 1 });
+  if (btn) { btn.disabled = false; btn.textContent = '＋ 追加'; }
+  if (error) { toast('追加失敗: ' + error.message, 'err'); return; }
+  if (id('tbNewLabel')) id('tbNewLabel').value = '';
+  toast('時間帯を追加しました');
+}
+
+/* ─── CSV export ────────────────────────── */
+function csvCell(v) {
+  const s = v == null ? '' : String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function downloadCSV() {
+  if (!participants.length) { toast('参加者がいません', 'err'); return; }
+
+  const STATUS_LABEL = { going: '出席', maybe: '検討中', tbd: '時間未定', absent: '欠席' };
+
+  const rows = [];
+
+  /* header row */
+  rows.push(['項目', ...participants.map(p => p.name)]);
+
+  /* ステータス */
+  rows.push(['ステータス', ...participants.map(p => STATUS_LABEL[p.status] || p.status)]);
+
+  /* お住まい */
+  rows.push(['お住まい', ...participants.map(p => p.residence || '')]);
+
+  /* Threads ID */
+  rows.push(['Threads ID', ...participants.map(p => p.threads_id || '')]);
+
+  /* 時間帯ブロック（sort_order 順） */
+  const sortedBlocks = [...timeBlocks].sort((a, b) => a.sort_order - b.sort_order);
+  sortedBlocks.forEach(tb => {
+    rows.push([
+      tb.label,
+      ...participants.map(p =>
+        participantTimeBlocks.some(
+          r => r.participant_id === p.id && r.time_block_id === tb.id
+        ) ? '◯' : '×'
+      ),
+    ]);
+  });
+
+  /* コメント */
+  rows.push(['コメント', ...participants.map(p => p.comment || '')]);
+
+  const csv = '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+
+  const today = new Date();
+  const ymd = today.getFullYear().toString()
+    + String(today.getMonth() + 1).padStart(2, '0')
+    + String(today.getDate()).padStart(2, '0');
+  const filename = `karaoke_${ymd}.csv`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSVをダウンロードしました', 'info');
+}
+
+/* ─── CSV import (調整さん形式) ─────────── */
+
+/* RFC 4180 準拠の軽量CSVパーサー */
+function parseCSV(text) {
+  const rows = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const row = [];
+    while (i < n && text[i] !== '\n') {
+      if (text[i] === '"') {
+        /* quoted field */
+        i++;
+        let cell = '';
+        while (i < n) {
+          if (text[i] === '"') {
+            if (text[i + 1] === '"') { cell += '"'; i += 2; }
+            else { i++; break; }
+          } else {
+            cell += text[i++];
+          }
+        }
+        row.push(cell);
+        if (text[i] === ',') i++;
+      } else {
+        /* unquoted field */
+        let start = i;
+        while (i < n && text[i] !== ',' && text[i] !== '\n') i++;
+        row.push(text.slice(start, i));
+        if (text[i] === ',') i++;
+      }
+    }
+    if (text[i] === '\n') i++;
+    if (row.length > 0 && !(row.length === 1 && row[0] === '')) rows.push(row);
+  }
+  return rows;
+}
+
+function closeImportModal() {
+  id('importModal').classList.add('hidden');
+  id('csvImportInput').value = '';
+}
+
+async function importAdjustCSV(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  /* ファイル読み込み（BOM除去・改行統一） */
+  const raw  = await file.text();
+  const text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  const allRows = parseCSV(text);
+  if (allRows.length < 2) { toast('CSVの形式が読み取れませんでした', 'err'); return; }
+
+  /* ヘッダー行を探す（1列目が「日程」の行） */
+  let headerIdx = -1;
+  for (let i = 0; i < allRows.length; i++) {
+    if (allRows[i][0]?.trim() === '日程') { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) { toast('ヘッダー行（「日程」列）が見つかりません', 'err'); return; }
+
+  const headerRow = allRows[headerIdx];
+  const dataRows  = allRows.slice(headerIdx + 1);
+
+  /* コメント行を末尾から探す */
+  let commentRowIdx = -1;
+  for (let i = dataRows.length - 1; i >= 0; i--) {
+    if (dataRows[i][0]?.trim() === 'コメント') { commentRowIdx = i; break; }
+  }
+  const commentRow  = commentRowIdx >= 0 ? dataRows[commentRowIdx] : null;
+  const statusRows  = dataRows.filter((_, i) => i !== commentRowIdx);
+
+  /* 参加者列（2列目以降）を解析 */
+  const importResults = [];
+  const insertJobs    = [];
+
+  for (let col = 1; col < headerRow.length; col++) {
+    const cell = (headerRow[col] ?? '').trim();
+    if (!cell) continue;
+
+    /* ヘッダーセルを「名前 ThreadsID」または「名前のみ」で分割
+       先頭の単語が日本語（ひらがな・カタカナ・漢字）を含む場合は名前と判定し、
+       アルファベット・数字のみでも先頭を名前として扱う。
+       例: "ひとみん hitomin_5656" → 名前:ひとみん, ID:hitomin_5656
+           "Nao naonii"           → 名前:Nao,     ID:naonii
+           "hitomin_5656"         → 名前:hitomin_5656, ID:空欄 */
+    const parts    = cell.split(/[\s　]+/);
+    const name       = parts[0];
+    const threads_id = parts.length >= 2 ? parts.slice(1).join(' ') : '';
+    if (!name) continue;
+
+    /* 重複チェック（全角半角無視） */
+    if (participants.some(p => normalize(p.name) === normalize(name))) {
+      importResults.push({ name, status: 'skip', reason: '既に登録済み（スキップ）' });
+      continue;
+    }
+
+    /* ステータス判定 */
+    const status = (() => {
+      for (const row of statusRows) {
+        const label = row[0]?.trim() ?? '';
+        const val   = (row[col] ?? '').trim();
+        if (label === '参加') {
+          if (val === '◯') return 'going';
+          if (val === '△') return 'maybe';
+        }
+        if (label === '不参加' && val === '◯') return 'absent';
+      }
+      /* 途中参加・途中退場など他行に◯か△があれば時間未定 */
+      const hasPartial = statusRows.some(row => {
+        const val = (row[col] ?? '').trim();
+        return val === '◯' || val === '△';
+      });
+      return hasPartial ? 'tbd' : 'absent';
+    })();
+
+    /* コメント */
+    const comment = (commentRow?.[col] ?? '').trim();
+
+    insertJobs.push({ name, status, threads_id, comment });
+  }
+
+  if (!insertJobs.length && !importResults.length) {
+    toast('インポート対象の参加者が見つかりませんでした', 'err'); return;
+  }
+
+  /* DB登録 */
+  toast('インポート中…', 'info');
+  const STATUS_LABEL_JP = { going: '参加するで登録', maybe: '検討中で登録',
+                             tbd: '時間未定で登録', absent: '欠席で登録' };
+  for (const job of insertJobs) {
+    const { error } = await sb
+      .from('participants')
+      .insert({ name: job.name, status: job.status,
+                threads_id: job.threads_id, comment: job.comment,
+                residence: '' });
+
+    if (error) {
+      importResults.push({ name: job.name, status: 'err', reason: error.message });
+      continue;
+    }
+    importResults.push({ name: job.name, status: 'ok',
+      reason: STATUS_LABEL_JP[job.status] ?? job.status });
+  }
+
+  await fetchParticipants();
+
+  /* 結果モーダル表示 */
+  const okCount   = importResults.filter(r => r.status === 'ok').length;
+  const skipCount = importResults.filter(r => r.status === 'skip').length;
+  const errCount  = importResults.filter(r => r.status === 'err').length;
+
+  const summaryHtml = `<div style="margin-bottom:10px;font-weight:700">
+    ✅ 登録: ${okCount}人　⏭️ スキップ: ${skipCount}人　❌ エラー: ${errCount}人</div>`;
+  const listHtml = importResults.map(r => {
+    const cls  = r.status === 'ok' ? 'import-result-ok'
+               : r.status === 'skip' ? 'import-result-skip' : 'import-result-err';
+    const icon = r.status === 'ok' ? '✅' : r.status === 'skip' ? '⏭️' : '❌';
+    return `<div class="import-result-item ${cls}">${icon} ${esc(r.name)} — ${esc(r.reason)}</div>`;
+  }).join('');
+
+  id('importModalBody').innerHTML = summaryHtml + listHtml;
+  id('importModal').classList.remove('hidden');
+}
+
+/* ─── admin: render list ────────────────── */
+function renderAdminList() {
+  const c = id('adminListContainer');
+  if (!participants.length) {
+    c.innerHTML = '<div class="empty-state">登録者なし</div>'; return;
+  }
+  let html = '';
+  participants.forEach((p, i) => {
+    const em = { going:'✅', maybe:'🤔', tbd:'⏰', absent:'🚫' }[p.status] ?? '';
+    html += `
+      <div class="p-item" id="ai-${i}">
+        <div class="p-body">
+          <div class="p-name-text">${em} ${esc(p.name)}</div>
+          ${p.residence  ? `<div class="p-residence">📍 ${esc(p.residence)}</div>` : ''}
+          ${p.threads_id ? `<div class="p-threads-id">${esc(p.threads_id)}</div>` : ''}
+          ${p.comment    ? `<div class="p-comment-text">${esc(p.comment)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-edit"   onclick="openEdit(${i})">編集</button>
+          <button class="btn btn-sm btn-delete" onclick="deletePart('${p.id}',${i})">削除</button>
+        </div>
+      </div>`;
+  });
+  c.innerHTML = html;
+}
+
+function openEdit(i) {
+  const p = participants[i];
+  const item = id('ai-' + i);
+  const selectedTbIds = participantTimeBlocks
+    .filter(r => r.participant_id === p.id)
+    .map(r => r.time_block_id);
+  const tbHtml = timeBlocks.length ? `
+    <div class="field-label" style="font-size:11px;margin:8px 0 5px">参加できる時間帯</div>
+    <div class="tb-check-group" style="margin-bottom:8px">
+      ${timeBlocks.map(tb => `
+        <div class="tb-check-item">
+          <input type="checkbox" id="ei-tb-${i}-${tb.id}" value="${tb.id}"
+            ${selectedTbIds.includes(tb.id)?'checked':''}>
+          <label for="ei-tb-${i}-${tb.id}">${esc(tb.label)}</label>
+        </div>`).join('')}
+    </div>` : '';
+  item.innerHTML = `
+    <div class="inline-edit-wrap">
+      <input class="inline-text-input" id="ei-name-${i}"
+        value="${esc(p.name)}" maxlength="20" placeholder="名前">
+      <div class="inline-pill-group">
+        ${[['going','✅ 参加する'],['maybe','🤔 検討中'],['tbd','⏰ 時間未定'],['absent','🚫 欠席']].map(([v,l]) => `
+          <label>
+            <input type="radio" name="ei-st-${i}" value="${v}"
+              ${p.status===v?'checked':''}>
+            ${l}
+          </label>`).join('')}
+      </div>
+      <input class="inline-text-input" id="ei-res-${i}"
+        value="${esc(p.residence??'')}" maxlength="40" placeholder="お住まい（任意）">
+      <input class="inline-text-input" id="ei-tid-${i}"
+        value="${esc(p.threads_id??'')}" maxlength="40" placeholder="Threads ID（任意）">
+      <input class="inline-text-input" id="ei-cmt-${i}"
+        value="${esc(p.comment??'')}" maxlength="40" placeholder="コメント（任意）">
+      ${tbHtml}
+      <div class="inline-actions">
+        <button class="btn btn-sm btn-edit"  onclick="saveEdit('${p.id}',${i})">保存</button>
+        <button class="btn btn-sm btn-ghost" onclick="renderAdminList()">戻る</button>
+      </div>
+    </div>`;
+}
+
+async function saveEdit(pid, i) {
+  const name       = id(`ei-name-${i}`).value.trim();
+  const status     = document.querySelector(`input[name="ei-st-${i}"]:checked`)?.value ?? 'maybe';
+  const residence  = id(`ei-res-${i}`).value.trim();
+  const threads_id = id(`ei-tid-${i}`).value.trim();
+  const comment    = id(`ei-cmt-${i}`).value.trim();
+  if (!name) { toast('名前は必須です', 'err'); return; }
+  if (participants.some((p, idx) => normalize(p.name) === normalize(name) && p.id !== pid)) {
+    toast('その名前はすでに存在します', 'err'); return;
+  }
+  const { error } = await sb.from('participants')
+    .update({ name, status, comment, residence, threads_id }).eq('id', pid);
+  if (error) { toast('更新失敗: ' + error.message, 'err'); return; }
+
+  /* 時間帯の更新: 既存を全削除してから再挿入 */
+  const newTbIds = [...document.querySelectorAll(`[id^="ei-tb-${i}-"]:checked`)]
+    .map(el => el.value);
+  await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
+  if (newTbIds.length) {
+    await sb.from('participant_time_blocks').insert(
+      newTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+    );
+  }
+
+  toast('更新しました');
+}
+
+async function deletePart(pid, i) {
+  const name = participants[i]?.name ?? '';
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  const { error } = await sb.from('participants').delete().eq('id', pid);
+  if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
+  toast('削除しました');
+}
+
+/* ─── self edit (本人による編集) ────────── */
+function toggleSelfEdit() {
+  const card = id('selfEditCard');
+  const isHidden = card.classList.toggle('hidden');
+  if (!isHidden) id('selfNameInput')?.focus();
+  if (isHidden) {
+    id('selfEditForm').classList.add('hidden');
+    id('selfEditForm').innerHTML = '';
+    id('selfNameInput').value = '';
+  }
+}
+
+async function selfLookup() {
+  const name = id('selfNameInput').value.trim();
+  if (!name) { toast('名前を入力してください', 'err'); return; }
+
+  const btn = id('selfLookupBtn');
+  btn.disabled = true; btn.textContent = '検索中…';
+  const found = participants.find(p => normalize(p.name) === normalize(name));
+  btn.disabled = false; btn.textContent = '呼び出す';
+
+  if (!found) { toast('その名前は登録されていません', 'err'); return; }
+
+  /* 最新データをDBから取得 */
+  const { data, error } = await sb
+    .from('participants').select('*').eq('id', found.id).maybeSingle();
+  if (error) { toast('取得失敗: ' + error.message, 'err'); return; }
+  renderSelfEditForm(data ?? found);
+}
+
+function renderSelfEditForm(p) {
+  const selectedTbIds = participantTimeBlocks
+    .filter(r => r.participant_id === p.id)
+    .map(r => r.time_block_id);
+
+  const tbHtml = timeBlocks.length ? `
+    <div class="field-wrap">
+      <label class="field-label">参加できる時間帯（複数選択可）</label>
+      <div class="tb-check-group">
+        ${timeBlocks.map(tb => `
+          <div class="tb-check-item">
+            <input type="checkbox" id="se-tb-${tb.id}" value="${tb.id}"
+              ${selectedTbIds.includes(tb.id) ? 'checked' : ''}>
+            <label for="se-tb-${tb.id}">${esc(tb.label)}</label>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const form = id('selfEditForm');
+  form.innerHTML = `
+    <div class="self-result-name">✅ 「${esc(p.name)}」を呼び出しました</div>
+    <div class="field-wrap">
+      <label class="field-label">ステータス</label>
+      <div class="pill-group">
+        <input type="radio" name="se-status" id="se-going" value="going" ${p.status==='going'?'checked':''}>
+        <label class="pill-label" for="se-going">✅ 参加する</label>
+        <input type="radio" name="se-status" id="se-maybe" value="maybe" ${p.status==='maybe'?'checked':''}>
+        <label class="pill-label" for="se-maybe">🤔 検討中</label>
+        <input type="radio" name="se-status" id="se-tbd"   value="tbd"   ${p.status==='tbd'?'checked':''}>
+        <label class="pill-label" for="se-tbd">⏰ 時間未定</label>
+        <input type="radio" name="se-status" id="se-absent" value="absent" ${p.status==='absent'?'checked':''}>
+        <label class="pill-label" for="se-absent">🚫 欠席</label>
+      </div>
+    </div>
+    ${tbHtml}
+    <div class="field-wrap">
+      <label class="field-label">お住まい（任意）</label>
+      <input class="text-input" id="se-res" type="text"
+        value="${esc(p.residence??'')}" maxlength="40"
+        placeholder="例：鳥取市、米子市など"
+        autocomplete="off" autocorrect="off">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">Threads ID（任意）</label>
+      <input class="text-input" id="se-tid" type="text"
+        value="${esc(p.threads_id??'')}" maxlength="40"
+        placeholder="例：@your_id"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">コメント（任意・40文字）</label>
+      <input class="text-input" id="se-cmt" type="text"
+        value="${esc(p.comment??'')}" maxlength="40"
+        placeholder="例：19時ごろ合流予定"
+        autocomplete="off" autocorrect="off">
+    </div>
+    <div class="self-actions">
+      <button class="btn btn-primary" style="flex:2" id="seSaveBtn"
+        onclick="saveSelfEdit('${p.id}')">保存する</button>
+      <button class="btn-danger-full" id="seDeleteBtn"
+        onclick="deleteSelf('${p.id}','${esc(p.name)}')">削除</button>
+    </div>`;
+  form.classList.remove('hidden');
+}
+
+async function saveSelfEdit(pid) {
+  const status     = document.querySelector('input[name="se-status"]:checked')?.value ?? 'maybe';
+  const residence  = id('se-res').value.trim();
+  const threads_id = id('se-tid').value.trim();
+  const comment    = id('se-cmt').value.trim();
+  const newTbIds   = [...document.querySelectorAll('[id^="se-tb-"]:checked')].map(el => el.value);
+
+  setLoading('seSaveBtn', true, '保存中…');
+  const { error } = await sb.from('participants')
+    .update({ status, comment, residence, threads_id }).eq('id', pid);
+
+  if (!error) {
+    await sb.from('participant_time_blocks').delete().eq('participant_id', pid);
+    if (newTbIds.length) {
+      await sb.from('participant_time_blocks').insert(
+        newTbIds.map(tbId => ({ participant_id: pid, time_block_id: tbId }))
+      );
+    }
+  }
+  setLoading('seSaveBtn', false, '保存する');
+
+  if (error) { toast('保存失敗: ' + error.message, 'err'); return; }
+  toast('更新しました！');
+  id('selfEditCard').classList.add('hidden');
+  id('selfEditForm').classList.add('hidden');
+  id('selfEditForm').innerHTML = '';
+  id('selfNameInput').value = '';
+}
+
+async function deleteSelf(pid, name) {
+  if (!confirm(`「${name}」の登録を削除しますか？`)) return;
+  setLoading('seDeleteBtn', true, '削除中…');
+  const { error } = await sb.from('participants').delete().eq('id', pid);
+  setLoading('seDeleteBtn', false, '削除');
+  if (error) { toast('削除失敗: ' + error.message, 'err'); return; }
+  toast('削除しました');
+  id('selfEditCard').classList.add('hidden');
+  id('selfEditForm').classList.add('hidden');
+  id('selfEditForm').innerHTML = '';
+  id('selfNameInput').value = '';
+  switchTab(document.querySelector('[data-tab=list]'));
+}
+
+/* ─── admin: save settings ──────────────── */
+async function saveNotice() {
+  const v = id('adminNotice').value.trim();
+  setLoading('noticeSaveBtn', true, '保存中…');
+  const { error } = await sb.from('settings').update({ value: v }).eq('key', 'notice');
+  setLoading('noticeSaveBtn', false, '保存する');
+  if (error) { toast('保存失敗', 'err'); return; }
+  toast('お知らせを更新しました');
+}
+
+async function saveInfo() {
+  const updates = [
+    { key: 'event_title',      value: id('adminTitle').value.trim()     },
+    { key: 'event_date',       value: id('adminEventDate').value        },
+    { key: 'event_start_time', value: id('adminStartTime').value        },
+    { key: 'event_end_time',   value: id('adminEndTime').value          },
+    { key: 'event_place',      value: id('adminPlace').value.trim()     },
+    { key: 'event_place_url',  value: id('adminPlaceUrl').value.trim()  },
+    { key: 'event_notes',      value: id('adminNotes').value.trim()     },
+  ];
+  setLoading('infoSaveBtn', true, '保存中…');
+  const promises = updates.map(u =>
+    sb.from('settings').upsert({ key: u.key, value: u.value })
+  );
+  const results = await Promise.all(promises);
+  setLoading('infoSaveBtn', false, '保存する');
+  const err = results.find(r => r.error);
+  if (err) { toast('保存失敗: ' + err.error.message, 'err'); return; }
+  toast('イベント情報を更新しました');
+}
+
+async function changeAdminPw() {
+  const newPw = id('adminNewPw').value.trim();
+  if (!newPw) { toast('新しいパスワードを入力してください', 'err'); return; }
+  if (newPw.length < 4) { toast('4文字以上で設定してください', 'err'); return; }
+  setLoading('pwChangeBtn', true, '更新中…');
+  const { error } = await sb.from('settings').update({ value: newPw }).eq('key', 'admin_pw');
+  setLoading('pwChangeBtn', false, 'パスワードを変更する');
+  if (error) { toast('更新失敗', 'err'); return; }
+  id('adminNewPw').value = '';
+  toast('パスワードを変更しました', 'info');
+}
+
+/* ─── tab switching ─────────────────────── */
+function switchTab(el) {
+  const tab = typeof el === 'string'
+    ? document.querySelector(`[data-tab="${el}"]`) : el;
+  if (!tab) return;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  id('pane-' + tab.dataset.tab).classList.add('active');
+}
+
+/* ─── utils ─────────────────────────────── */
+function id(s) { return document.getElementById(s); }
+function ls(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function autoExpand(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+function toggleNotice() {
+  const body   = id('noticeText');
+  const toggle = id('noticeToggle');
+  const collapsed = body.classList.toggle('collapsed');
+  toggle.textContent = collapsed ? '▼ もっと見る' : '▲ 閉じる';
+}
+
+/* 全角英数字・記号・カナを半角に正規化してから小文字化 */
+function normalize(str) {
+  return String(str ?? '')
+    .replace(/[Ａ-Ｚａ-ｚ０-９！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[ァ-ン]/g, c => {
+      const h = 'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ';
+      const f = 'ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン゛゜';
+      const i = f.indexOf(c);
+      return i >= 0 ? h[i] : c;
+    })
+    .toLowerCase();
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, type = 'ok') {
+  const el = id('toastEl');
+  el.textContent = msg;
+  el.className = `toast show toast-${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+}
+
+function setLoading(btnId, loading, label) {
+  const btn = id(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<span class="spinner"></span>${label}` : label;
+}
+</script>
+</body>
+</html>
