@@ -893,6 +893,10 @@ alter publication supabase_realtime
         <!-- イベント情報 -->
         <div class="form-card">
           <div class="form-heading">📋 イベント情報</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            ※ イベント名・日付はトップページのイベント一覧管理で設定した内容が優先されます。<br>
+            　トップページ側が未設定の場合のみ、ここで入力した内容が表示されます。
+          </p>
           <div class="field-wrap">
             <label class="field-label">イベント名</label>
             <input class="text-input" id="adminTitle" type="text"
@@ -1050,6 +1054,7 @@ let participantTimeBlocks = [];   // [{participant_id, time_block_id}]
 let timeBlocksTableError  = false; // true if time_blocks table missing in Supabase
 let adminUnlocked         = false;
 let rtChannel             = null;
+let eventMeta             = {};   // { title, event_date } from top ページの events テーブル(event_no=EVENT_ID)
 
 /* ─── startup ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -1108,11 +1113,22 @@ function copySQL() {
 async function bootApp() {
   id('configScreen').classList.add('hidden');
   id('appRoot').classList.remove('hidden');
-  await Promise.all([fetchSettings(), fetchTimeBlocks(), fetchParticipants()]);
+  await Promise.all([fetchSettings(), fetchTimeBlocks(), fetchParticipants(), fetchEventMeta()]);
   subscribeRealtime();
 }
 
 /* ─── data fetch ────────────────────────── */
+async function fetchEventMeta() {
+  /* トップページの events テーブル（event_no=EVENT_ID）からタイトル・日付を取得。
+     未作成・未登録の場合は settings 側の値にフォールバックする。 */
+  const { data, error } = await sb
+    .from('events').select('title, event_date')
+    .eq('event_no', EVENT_ID).maybeSingle();
+  if (error) { console.error(error); eventMeta = {}; applySettings(); return; }
+  eventMeta = data ?? {};
+  applySettings();
+}
+
 async function fetchSettings() {
   const { data, error } = await sb
     .from('settings').select('*')
@@ -1176,8 +1192,10 @@ function formatDatetime(dateStr, startTime, endTime) {
 
 /* ─── apply settings to UI ──────────────── */
 function applySettings() {
-  const title     = settings.event_title      || 'カラオケオフ会';
-  const eventDate = settings.event_date       || '';
+  /* タイトル・日付はトップページの events テーブル（eventMeta）を優先し、
+     未登録の場合はこのページの settings 側の値にフォールバックする */
+  const title     = eventMeta.title      || settings.event_title || 'カラオケオフ会';
+  const eventDate = eventMeta.event_date || settings.event_date  || '';
   const startTime = settings.event_start_time || '';
   const endTime   = settings.event_end_time   || '';
   const datetime  = formatDatetime(eventDate, startTime, endTime)
@@ -1264,6 +1282,9 @@ function subscribeRealtime() {
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'settings' },
         () => fetchSettings())
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'events', filter: `event_no=eq.${EVENT_ID}` },
+        () => fetchEventMeta())
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'time_blocks', filter: `event_id=eq.${EVENT_ID}` },
         () => fetchTimeBlocks())
