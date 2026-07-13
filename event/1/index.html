@@ -590,6 +590,8 @@ insert into settings (key, value) values
   ('event_end_time',   ''),
   ('event_place',      ''),
   ('event_place_url',  ''),
+  ('organizer_name',        ''),
+  ('organizer_threads_id',  ''),
   ('event_notes',      ''),
   ('notice',           ''),
   ('admin_pw',         '')
@@ -656,7 +658,9 @@ alter publication supabase_realtime
 --   ('event_date',       ''),
 --   ('event_start_time', ''),
 --   ('event_end_time',   ''),
---   ('event_place_url',  '')
+--   ('event_place_url',  ''),
+--   ('organizer_name',        ''),
+--   ('organizer_threads_id',  '')
 -- on conflict (key) do nothing;</pre>
       <button class="sql-copy-btn" id="sqlCopyBtn" onclick="copySQL()">コピー</button>
     </div>
@@ -902,6 +906,18 @@ alter publication supabase_realtime
               placeholder="例：https://maps.google.com/..." maxlength="500">
           </div>
           <div class="field-wrap">
+            <label class="field-label">幹事名 <span style="font-weight:400;font-size:13px;color:var(--muted)">（任意）</span></label>
+            <input class="text-input" id="adminOrganizerName" type="text"
+              placeholder="例：anego" maxlength="40"
+              autocomplete="off" autocorrect="off">
+          </div>
+          <div class="field-wrap">
+            <label class="field-label">幹事のThreads ID <span style="font-weight:400;font-size:13px;color:var(--muted)">（任意）</span></label>
+            <input class="text-input" id="adminOrganizerThreadsId" type="text"
+              placeholder="例：@anego_threads" maxlength="40"
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          </div>
+          <div class="field-wrap">
             <label class="field-label">注意事項</label>
             <textarea class="textarea-input" id="adminNotes"
               placeholder="例：フリータイム制。途中参加・退出OK。" maxlength="200"></textarea>
@@ -1138,6 +1154,8 @@ function applySettings() {
   const placeUrl  = settings.event_place_url  || '';
   const notes     = settings.event_notes      || '';
   const notice    = settings.notice           || '';
+  const orgName   = settings.organizer_name         || '';
+  const orgThreads = settings.organizer_threads_id  || '';
 
   id('eventTitleDisplay').textContent = '🎤 ' + title;
 
@@ -1150,6 +1168,16 @@ function applySettings() {
     } else {
       infoHtml += `📍<span>${esc(place)}</span>　`;
     }
+  }
+  if (orgName || orgThreads) {
+    let orgLine = esc(orgName);
+    if (orgThreads) {
+      const handle = orgThreads.replace(/^@/, '');
+      const threadsUrl = `https://www.threads.net/@${encodeURIComponent(handle)}`;
+      const threadsLink = `<a href="${esc(threadsUrl)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${esc(orgThreads)}</a>`;
+      orgLine += orgName ? `（${threadsLink}）` : threadsLink;
+    }
+    infoHtml += `<br>👑<span>幹事: ${orgLine}</span>`;
   }
   if (notes)    infoHtml += `<br>📝<span style="font-weight:400;color:var(--muted)">${esc(notes)}</span>`;
   id('eventInfoBlock').innerHTML = infoHtml;
@@ -1183,6 +1211,8 @@ function applySettings() {
   setVal('adminEndTime',   endTime);
   setVal('adminPlace',     place);
   setVal('adminPlaceUrl',  placeUrl);
+  setVal('adminOrganizerName',       orgName);
+  setVal('adminOrganizerThreadsId',  orgThreads);
   setVal('adminNotes',     notes);
   setVal('adminNotice',    notice);
   const noticeEl = id('adminNotice');
@@ -1937,6 +1967,8 @@ async function saveInfo() {
     { key: 'event_end_time',   value: id('adminEndTime').value          },
     { key: 'event_place',      value: id('adminPlace').value.trim()     },
     { key: 'event_place_url',  value: id('adminPlaceUrl').value.trim()  },
+    { key: 'organizer_name',        value: id('adminOrganizerName').value.trim()       },
+    { key: 'organizer_threads_id',  value: id('adminOrganizerThreadsId').value.trim()  },
     { key: 'event_notes',      value: id('adminNotes').value.trim()     },
   ];
   setLoading('infoSaveBtn', true, '保存中…');
